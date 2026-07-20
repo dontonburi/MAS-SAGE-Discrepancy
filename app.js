@@ -15,7 +15,7 @@
     { g: "Drinks", items: [["Rainbow (Drinks)", "Rainbow"]] },
     { g: "Gallon", items: [["Gallon", "1 Gal"], ["2.5 Gallon", "2.5 Gal"]] },
     {
-      g: "Processing",
+      g: "Processing", full: true,
       items: [
         ["Processing A", "A"], ["Processing B", "B"], ["Processing C", "C"], ["Processing D", "D"],
         ["Pops Processing", "Pops"], ["Drinks Processing", "Drinks"],
@@ -66,6 +66,7 @@
     var norm = function (r) {
       return {
         id: r.id, code: r.code, desc: r.description, qty: Number(r.qty),
+        lot: r.lot || "", shift: r.shift == null ? null : Number(r.shift),
         date: r.used_on, lines: r.lines || [], ts: Date.parse(r.created_at) || Date.now(),
       };
     };
@@ -77,7 +78,7 @@
           .then(function (rows) { return rows.map(norm); });
       },
       save: function (e) {
-        var body = JSON.stringify([{ code: e.code, description: e.desc, qty: e.qty, used_on: e.date, lines: e.lines }]);
+        var body = JSON.stringify([{ code: e.code, description: e.desc, qty: e.qty, lot: e.lot || null, shift: e.shift, used_on: e.date, lines: e.lines }]);
         return fetch(BASE, {
           method: "POST",
           headers: Object.assign({ Prefer: "return=representation" }, HEADERS),
@@ -116,7 +117,7 @@
 
   /* ---------------- state ---------------- */
   var S = {
-    entries: [], sel: null, linesSel: [], shown: [], hi: 0,
+    entries: [], sel: null, linesSel: [], shift: null, shown: [], hi: 0,
     confirmId: null, confirmTimer: null, toastTimer: null, saving: false,
     ftext: "", fline: "",
   };
@@ -163,7 +164,7 @@
         return '<button type="button" class="chip" data-line="' + esc(it[0]) + '" aria-pressed="false" title="' +
           esc(it[0]) + '"><span class="lamp"></span>' + esc(it[1]) + "</button>";
       }).join("");
-      return '<div class="board-row"><span class="gname">' + esc(g.g) + '</span><div class="chips">' + chips + "</div></div>";
+      return '<div class="board-row' + (g.full ? " full" : "") + '"><span class="gname">' + esc(g.g) + '</span><div class="chips">' + chips + "</div></div>";
     }).join("");
     $("board").innerHTML = html;
   }
@@ -177,6 +178,16 @@
     });
     var n = S.linesSel.length;
     $("selSummary").textContent = n ? n + " line" + (n > 1 ? "s" : "") + " selected" : "";
+    syncClearBtn();
+  }
+
+  function syncShift() {
+    var btns = $("shiftGroup").querySelectorAll(".chip");
+    btns.forEach(function (b) {
+      var on = Number(b.getAttribute("data-shift")) === S.shift;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
     syncClearBtn();
   }
 
@@ -256,7 +267,7 @@
 
   /* ---------------- form actions ---------------- */
   function syncClearBtn() {
-    var dirty = S.sel || $("matInput").value || $("qtyInput").value || S.linesSel.length;
+    var dirty = S.sel || $("matInput").value || $("qtyInput").value || $("lotInput").value || S.shift || S.linesSel.length;
     $("clearBtn").classList.toggle("hidden", !dirty);
   }
   function showErr(msg) { var b = $("errBox"); b.textContent = msg; b.classList.remove("hidden"); }
@@ -273,8 +284,11 @@
     var m = null;
     for (var i = 0; i < MATERIALS.length; i++) if (MATERIALS[i].c === "10498") { m = MATERIALS[i]; break; }
     pickMaterial(m || MATERIALS[0]);
+    $("lotInput").value = "S340C";
     $("qtyInput").value = "250";
     $("dateInput").value = todayStr();
+    S.shift = 3;
+    syncShift();
     S.linesSel = ["Processing B", "Processing C"];
     syncBoard();
     $("exampleNote").classList.remove("hidden");
@@ -283,8 +297,11 @@
   function clearForm() {
     clearPick();
     $("matInput").value = "";
+    $("lotInput").value = "";
     $("qtyInput").value = "";
     $("dateInput").value = todayStr();
+    S.shift = null;
+    syncShift();
     S.linesSel = [];
     syncBoard();
     $("exampleNote").classList.add("hidden");
@@ -300,12 +317,14 @@
     if (!S.sel) missing.push("a material");
     if (!qty || Number(qty) <= 0) missing.push("a quantity");
     if (!date) missing.push("a date");
+    if (!S.shift) missing.push("a shift");
     if (S.linesSel.length === 0) missing.push("at least one line");
     if (missing.length) { showErr("Add " + missing.join(", ") + "."); return; }
     hideErr();
 
     var entry = {
       code: S.sel.c, desc: S.sel.d, qty: Number(qty), date: date,
+      lot: $("lotInput").value.trim(), shift: S.shift,
       lines: ALL_LINES.filter(function (l) { return S.linesSel.indexOf(l) !== -1; }),
     };
     S.saving = true;
@@ -315,6 +334,7 @@
       S.entries.push(saved);
       clearPick();
       $("matInput").value = "";
+      $("lotInput").value = "";
       $("qtyInput").value = "";
       $("exampleNote").classList.add("hidden");
       renderLog();
@@ -337,7 +357,7 @@
     var q = S.ftext.trim().toUpperCase();
     return S.entries.filter(function (e) {
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
-      if (q && (e.code + " " + e.desc).toUpperCase().indexOf(q) === -1) return false;
+      if (q && (e.code + " " + e.desc + " " + (e.lot || "")).toUpperCase().indexOf(q) === -1) return false;
       return true;
     }).sort(function (a, b) {
       if (a.date < b.date) return 1;
@@ -366,12 +386,15 @@
       var del = S.confirmId === e.id
         ? '<button type="button" class="ghost sm danger" data-del="' + esc(e.id) + '">Confirm delete</button>'
         : '<button type="button" class="ghost sm" data-ask="' + esc(e.id) + '">Delete</button>';
+      var lot = e.lot ? '<span class="mono row-lot">Lot ' + esc(e.lot) + "</span>" : "";
+      var meta = (e.shift ? "Shift " + esc(e.shift) + " · " : "") +
+        "Used " + esc(fmtDate(e.date)) + " · logged " + esc(fmtTime(e.ts));
       return '<article class="row">' +
-        '<div class="row-top"><span class="mono row-code">' + esc(e.code) + '</span>' +
+        '<div class="row-top"><span class="mono row-code">' + esc(e.code) + '</span>' + lot +
         '<span class="row-desc">' + esc(e.desc) + '</span>' +
         '<span class="mono row-qty">' + esc(fmtQty(e.qty)) + "</span></div>" +
         '<div class="row-bot"><div class="row-chips">' + tags + "</div>" +
-        '<span class="meta">Used ' + esc(fmtDate(e.date)) + " · logged " + esc(fmtTime(e.ts)) + "</span>" +
+        '<span class="meta">' + meta + "</span>" +
         '<div class="row-actions"><button type="button" class="ghost sm" data-reuse="' + esc(e.id) +
         '" title="Refill the form with this material and lines">Reuse</button>' + del + "</div></div></article>";
     }).join("") + "</div>";
@@ -397,6 +420,7 @@
     pickMaterial({ c: e.code, d: e.desc });
     S.linesSel = (e.lines || []).filter(function (l) { return ALL_LINES.indexOf(l) !== -1; });
     syncBoard();
+    $("lotInput").value = e.lot || "";
     $("qtyInput").value = "";
     $("dateInput").value = todayStr();
     $("exampleNote").classList.add("hidden");
@@ -420,9 +444,9 @@
   function exportCsv() {
     var vis = visibleEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Date used", "Material code", "Description", "Quantity", "Lines", "Logged at"]];
+    var rows = [["Date used", "Material code", "Description", "Lot", "Quantity", "Shift", "Lines", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.code, e.desc, e.qty, (e.lines || []).join("; "), new Date(e.ts).toLocaleString()]);
+      rows.push([e.date, e.code, e.desc, e.lot || "", e.qty, e.shift || "", (e.lines || []).join("; "), new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -477,6 +501,14 @@
     });
 
     $("qtyInput").addEventListener("input", syncClearBtn);
+    $("lotInput").addEventListener("input", syncClearBtn);
+    $("shiftGroup").addEventListener("click", function (e) {
+      var b = e.target.closest(".chip");
+      if (!b) return;
+      var v = Number(b.getAttribute("data-shift"));
+      S.shift = S.shift === v ? null : v;
+      syncShift();
+    });
     $("saveBtn").addEventListener("click", saveEntry);
     $("clearBtn").addEventListener("click", clearForm);
     $("exampleBtn").addEventListener("click", loadExample);

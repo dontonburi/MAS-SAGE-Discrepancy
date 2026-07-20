@@ -1,6 +1,6 @@
 # Material Usage Log
 
-A small website for the team to record material usage: **material code, quantity, date used, and which production lines** (multi-select). The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
+A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), and which production lines** (multi-select). The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
 
 No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it runs.
 
@@ -38,10 +38,12 @@ No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it r
 ## How an entry is filled
 
 1. **Material** — type `10498` *or* "granulated sugar" and pick the match (code + description lock in together).
-2. **Quantity** — e.g. `250`.
-3. **When used** — defaults to today.
-4. **Lines** — tap every line it applies to, e.g. **Processing B** and **Processing C**.
-5. **Save entry.**
+2. **Lot code** — e.g. `S340C` (optional — leave blank if there isn't one).
+3. **Quantity** — e.g. `250`.
+4. **When used** — defaults to today.
+5. **Shift** — tap **1**, **2**, or **3**.
+6. **Lines** — tap every line it applies to, e.g. **Processing B** and **Processing C**.
+7. **Save entry.**
 
 There's a **Load example** button in the app that fills the form exactly like this.
 
@@ -59,7 +61,9 @@ There's a **Load example** button in the app that fills the form exactly like th
      id uuid primary key default gen_random_uuid(),
      code text not null,
      description text not null,
+     lot text,
      qty numeric not null,
+     shift smallint,
      used_on date not null,
      lines text[] not null,
      created_at timestamptz not null default now()
@@ -73,6 +77,8 @@ There's a **Load example** button in the app that fills the form exactly like th
 
 3. Go to **Project Settings → API** and copy two values: the **Project URL** and the **`anon` public key**.
 4. Paste both into `config.js`, commit, and push. Done — the header pill switches to **"Live shared log."**
+
+   *(Already created the table before the lot/shift columns were added? Run this once in the SQL Editor instead of recreating it: `alter table usage_entries add column if not exists lot text, add column if not exists shift smallint;`)*
 
 Notes on that setup:
 

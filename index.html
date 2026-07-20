@@ -42,8 +42,8 @@
 
       <div class="example-note hidden" id="exampleNote">
         <strong>Example ticket:</strong> 250 of material <span class="mono">10498</span> (granulated sugar),
-        used today on Processing B and Processing C. Press <strong>Save entry</strong> to log it, or
-        <strong>Clear</strong> to start fresh.
+        lot <span class="mono">S340C</span>, used today during shift 3 on Processing B and Processing C.
+        Press <strong>Save entry</strong> to log it, or <strong>Clear</strong> to start fresh.
       </div>
 
       <div class="field">
@@ -63,7 +63,11 @@
         </div>
       </div>
 
-      <div class="pair">
+      <div class="quad">
+        <div class="field">
+          <label class="flabel" for="lotInput">Lot code — optional</label>
+          <input id="lotInput" class="input mono" placeholder="e.g. S340C" autocomplete="off" />
+        </div>
         <div class="field">
           <label class="flabel" for="qtyInput">Quantity</label>
           <input id="qtyInput" class="input mono" type="number" min="0" step="any" inputmode="decimal" placeholder="0" />
@@ -71,6 +75,14 @@
         <div class="field">
           <label class="flabel" for="dateInput">When used</label>
           <input id="dateInput" class="input mono" type="date" />
+        </div>
+        <div class="field">
+          <span class="flabel">Shift</span>
+          <div class="shift-group" id="shiftGroup">
+            <button type="button" class="chip shift" data-shift="1" aria-pressed="false">1</button>
+            <button type="button" class="chip shift" data-shift="2" aria-pressed="false">2</button>
+            <button type="button" class="chip shift" data-shift="3" aria-pressed="false">3</button>
+          </div>
         </div>
       </div>
 
@@ -98,7 +110,7 @@
       </div>
 
       <div class="filters">
-        <input id="searchInput" class="input" placeholder="Search code or material…" />
+        <input id="searchInput" class="input" placeholder="Search code, material, or lot…" />
         <select id="lineFilter" class="input">
           <option value="">All lines</option>
         </select>

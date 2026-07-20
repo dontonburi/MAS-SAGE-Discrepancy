@@ -9,7 +9,10 @@
 //                             step-by-step instructions are in README.md.
 // ---------------------------------------------------------------------------
 window.APP_CONFIG = {
-  SUPABASE_URL: "",       // e.g. "https://abcd1234.supabase.co"
-  SUPABASE_ANON_KEY: "",  // the long "anon public" key from Supabase settings
+  SUPABASE_URL: "https://tvoufsqcgyisdljctbsy.supabase.co",
+  // Paste your key below (Supabase: Project Settings -> API Keys).
+  // Use the "anon public" key, or the "Publishable" key on newer projects.
+  // The app stays in device-only mode until this is filled in.
+  SUPABASE_ANON_KEY: "",
   TABLE: "usage_entries",
 };
