@@ -419,28 +419,31 @@
       return;
     }
 
-    area.innerHTML = '<div class="rows">' + vis.map(function (e) {
-      var tags = (e.lines || []).map(function (l) { return '<span class="tag">' + esc(l) + "</span>"; }).join("");
-      var del = S.confirmId === e.id
-        ? '<button type="button" class="ghost sm danger" data-del="' + esc(e.id) + '">Confirm delete</button>'
-        : '<button type="button" class="ghost sm" data-ask="' + esc(e.id) + '">Delete</button>';
-      var lot = e.lot ? '<span class="mono row-lot">Lot ' + esc(e.lot) + "</span>" : "";
-      var meta = (e.shift ? "Shift " + esc(e.shift) + " · " : "") +
-        "Used " + esc(fmtDate(e.date)) + " · logged " + esc(fmtTime(e.ts)) +
-        (e.by ? " by " + esc(e.by) : "");
-      var note = e.note ? '<div class="row-note">' + esc(e.note) + "</div>" : "";
-      var rect = '<button type="button" class="rect' + (e.rectified ? " on" : "") + '" data-rect="' + esc(e.id) +
-        '" aria-pressed="' + (e.rectified ? "true" : "false") + '" title="' +
-        (e.rectified ? "Being rectified — click to unmark" : "Mark as being rectified") + '">\u2713</button>';
-      return '<article class="row' + (e.rectified ? " done" : "") + '">' +
-        '<div class="row-top">' + rect + '<span class="mono row-code">' + esc(e.code) + '</span>' + lot +
-        '<span class="row-desc">' + esc(e.desc) + '</span>' +
-        '<span class="mono row-qty">' + esc(fmtQty(e.qty)) + "</span></div>" +
-        '<div class="row-bot"><div class="row-chips">' + tags + "</div>" +
-        '<span class="meta">' + meta + "</span>" +
-        '<div class="row-actions"><button type="button" class="ghost sm" data-reuse="' + esc(e.id) +
-        '" title="Refill the form with this material and lines">Reuse</button>' + del + "</div></div>" + note + "</article>";
-    }).join("") + "</div>";
+    var HEADS = '<th class="c-r"></th><th class="c-date">Batch/Production date</th><th>Item (MAS)</th>' +
+      '<th>Lot code</th><th>Description</th><th>Line</th><th>Shift</th><th class="c-qty">Qtty missing</th>' +
+      '<th>Note</th><th>Name</th><th></th>';
+    area.innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr>' + HEADS + "</tr></thead><tbody>" +
+      vis.map(function (e) {
+        var rect = '<button type="button" class="rect' + (e.rectified ? " on" : "") + '" data-rect="' + esc(e.id) +
+          '" aria-pressed="' + (e.rectified ? "true" : "false") + '" title="' +
+          (e.rectified ? "Being rectified — click to unmark" : "Mark as being rectified") + '">\u2713</button>';
+        var del = S.confirmId === e.id
+          ? '<button type="button" class="ghost sm danger" data-del="' + esc(e.id) + '">Confirm delete</button>'
+          : '<button type="button" class="ghost sm" data-ask="' + esc(e.id) + '">Delete</button>';
+        return '<tr class="' + (e.rectified ? "done" : "") + '">' +
+          '<td class="c-r">' + rect + "</td>" +
+          '<td class="c-date">' + esc(fmtDate(e.date)) + "</td>" +
+          '<td class="c-code">' + esc(e.code) + "</td>" +
+          '<td class="c-lot">' + esc(e.lot || "") + "</td>" +
+          '<td class="c-desc">' + esc(e.desc) + "</td>" +
+          '<td class="c-line">' + esc((e.lines || []).join(", ")) + "</td>" +
+          "<td>" + esc(e.shift || "") + "</td>" +
+          '<td class="c-qty">' + esc(fmtQty(e.qty)) + "</td>" +
+          '<td class="c-note">' + esc(e.note || "") + "</td>" +
+          "<td>" + esc(e.by || "") + "</td>" +
+          '<td class="c-act"><button type="button" class="ghost sm" data-reuse="' + esc(e.id) +
+          '" title="Refill the form with this material and lines">Reuse</button>' + del + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
   }
 
   function removeEntry(id) {
@@ -489,9 +492,9 @@
     var vis = visibleEntries();
     if (!vis.length) return;
     var clean = function (c) { return String(c == null ? "" : c).replace(/[\t\n\r]+/g, " "); };
-    var head = ["Date used", "Code", "Description", "Lot", "Qty", "Shift", "Line(s)", "Entered by", "Notes"];
+    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name"];
     var data = vis.map(function (e) {
-      return [e.date, e.code, e.desc, e.lot || "", fmtQty(e.qty), e.shift || "", (e.lines || []).join(", "), e.by || "", e.note || ""];
+      return [e.date, e.code, e.lot || "", e.desc, (e.lines || []).join(", "), e.shift || "", fmtQty(e.qty), e.note || "", e.by || ""];
     });
     var title = "MAS material adjustments for approval (" + vis.length + ")";
     var tsv = title + "\n" + [head].concat(data).map(function (r) { return r.map(clean).join("\t"); }).join("\n");
@@ -531,9 +534,9 @@
   function exportCsv() {
     var vis = visibleEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Date used", "Material code", "Description", "Lot", "Quantity", "Shift", "Lines", "Entered by", "Notes", "Rectified", "Logged at"]];
+    var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Rectified", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.code, e.desc, e.lot || "", e.qty, e.shift || "", (e.lines || []).join("; "), e.by || "", e.note || "", e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
+      rows.push([e.date, e.code, e.lot || "", e.desc, (e.lines || []).join("; "), e.shift || "", e.qty, e.note || "", e.by || "", e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
