@@ -83,9 +83,10 @@ h1 {
 .input:focus { border-color: var(--steel); outline: none; }
 .input.mono { font-family: "IBM Plex Mono"; font-weight: 500; }
 .quad { display: grid; grid-template-columns: 1.1fr 0.9fr 1.1fr auto; gap: 14px; }
-.noterow { display: grid; grid-template-columns: 220px 1fr; gap: 14px; }
+.noterow { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
 @media (max-width: 760px) { .noterow { grid-template-columns: 1fr; } }
-textarea.input { resize: vertical; min-height: 42px; line-height: 1.4; }
+.noterow .field { margin-bottom: 12px; }
+textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 1.35; }
 @media (max-width: 760px) { .quad { grid-template-columns: 1fr 1fr; } }
 .shift-group { display: flex; gap: 6px; }
 .chip.shift {
@@ -183,7 +184,16 @@ textarea.input { resize: vertical; min-height: 42px; line-height: 1.4; }
   border: 1px solid var(--line); border-left: 4px solid var(--steel);
   border-radius: 8px; background: #fff; padding: 11px 14px;
 }
-.row-top { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.row-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rect {
+  width: 20px; height: 20px; flex: none; padding: 0;
+  border: 1.5px solid var(--line); border-radius: 5px; background: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1; color: transparent; transition: all 0.12s;
+}
+.rect:hover { border-color: var(--ok); }
+.rect.on { background: var(--ok); border-color: var(--ok); color: #fff; }
+.row.done { border-left-color: var(--ok); }
 .row-code { font-weight: 600; font-size: 15px; color: var(--steel-deep); }
 .row-lot { font-size: 12.5px; color: var(--muted); }
 .row-desc { flex: 1 1 200px; font-size: 14px; }
@@ -196,7 +206,7 @@ textarea.input { resize: vertical; min-height: 42px; line-height: 1.4; }
   border: 1px solid var(--line); border-radius: 4px; background: #f4f5f0; color: #3b4a55;
 }
 .meta { font-size: 12.5px; color: var(--muted); margin-left: auto; }
-.row-note { margin-top: 7px; padding-top: 6px; border-top: 1px dashed #e9ebe4; font-size: 13px; color: #4a5a65; }
+.row-note { margin-top: 6px; padding-top: 5px; border-top: 1px dashed #e9ebe4; font-size: 12px; color: #55646f; }
 .row-actions { display: flex; gap: 6px; }
 .empty {
   border: 1.5px dashed var(--line); border-radius: 8px; padding: 26px 18px;

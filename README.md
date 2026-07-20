@@ -1,6 +1,6 @@
 # Material Usage Log
 
-A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
+A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. A **Copy table** button puts the current view on the clipboard as a table — paste it straight into an email for management approval, or into Excel. Each entry also has a **checkmark** to track which discrepancies are being rectified. The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
 
 No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it runs.
 
@@ -68,6 +68,7 @@ There's a **Load example** button in the app that fills the form exactly like th
      shift smallint,
      entered_by text,
      note text,
+     rectified boolean not null default false,
      used_on date not null,
      lines text[] not null,
      created_at timestamptz not null default now()
@@ -77,12 +78,13 @@ There's a **Load example** button in the app that fills the form exactly like th
    create policy "team read"   on usage_entries for select using (true);
    create policy "team insert" on usage_entries for insert with check (true);
    create policy "team delete" on usage_entries for delete using (true);
+   create policy "team update" on usage_entries for update using (true) with check (true);
    ```
 
 3. Go to **Project Settings → API** and copy two values: the **Project URL** and the **`anon` public key**.
 4. Paste both into `config.js`, commit, and push. Done — the header pill switches to **"Live shared log."**
 
-   *(Created the table from an older version of this README? Run this once in the SQL Editor to add any missing columns: `alter table usage_entries add column if not exists lot text, add column if not exists shift smallint, add column if not exists entered_by text, add column if not exists note text;`)*
+   *(Created the table from an older version of this README? Run this once in the SQL Editor to add any missing columns: `alter table usage_entries add column if not exists lot text, add column if not exists shift smallint, add column if not exists entered_by text, add column if not exists note text, add column if not exists rectified boolean not null default false;` — and if your policies predate the checkmark feature, also run `create policy "team update" on usage_entries for update using (true) with check (true);`)*
 
 Notes on that setup:
 

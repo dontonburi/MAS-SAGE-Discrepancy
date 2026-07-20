@@ -68,7 +68,7 @@
       return {
         id: r.id, code: r.code, desc: r.description, qty: Number(r.qty),
         lot: r.lot || "", shift: r.shift == null ? null : Number(r.shift),
-        by: r.entered_by || "", note: r.note || "",
+        by: r.entered_by || "", note: r.note || "", rectified: !!r.rectified,
         date: r.used_on, lines: r.lines || [], ts: Date.parse(r.created_at) || Date.now(),
       };
     };
@@ -93,6 +93,15 @@
         return fetch(BASE + "?id=eq." + encodeURIComponent(id), { method: "DELETE", headers: HEADERS })
           .then(function (r) { if (!r.ok) throw new Error("delete " + r.status); });
       },
+      update: function (id, fields) {
+        return fetch(BASE + "?id=eq." + encodeURIComponent(id), {
+          method: "PATCH",
+          headers: Object.assign({ Prefer: "return=representation" }, HEADERS),
+          body: JSON.stringify(fields),
+        })
+          .then(function (r) { if (!r.ok) throw new Error("update " + r.status); return r.json(); })
+          .then(function (rows) { if (!rows.length) throw new Error("no row updated"); });
+      },
     };
   } else {
     var lsRead = function () {
@@ -112,6 +121,10 @@
       },
       remove: function (id) {
         lsWrite(lsRead().filter(function (e) { return e.id !== id; }));
+        return Promise.resolve();
+      },
+      update: function (id, fields) {
+        lsWrite(lsRead().map(function (e) { return e.id === id ? Object.assign({}, e, fields) : e; }));
         return Promise.resolve();
       },
     };
@@ -331,7 +344,7 @@
     var entry = {
       code: S.sel.c, desc: S.sel.d, qty: Number(qty), date: date,
       lot: $("lotInput").value.trim(), shift: S.shift,
-      by: $("nameInput").value.trim(), note: $("noteInput").value.trim(),
+      by: $("nameInput").value.trim(), note: $("noteInput").value.trim(), rectified: false,
       lines: ALL_LINES.filter(function (l) { return S.linesSel.indexOf(l) !== -1; }),
     };
     S.saving = true;
@@ -361,6 +374,20 @@
     });
   }
 
+  /* ---------------- copy table for approval ---------------- */
+  function copyText(t) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t);
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return Promise.resolve();
+    } catch (e) { return Promise.reject(e); }
+  }
+
   /* ---------------- log ---------------- */
   function visibleEntries() {
     var q = S.ftext.trim().toUpperCase();
@@ -382,6 +409,8 @@
     $("entryCount").textContent = n + (n === 1 ? " entry" : " entries");
     $("exportBtn").textContent = "Export CSV (" + vis.length + ")";
     $("exportBtn").disabled = vis.length === 0;
+    $("copyTableBtn").textContent = "Copy table (" + vis.length + ")";
+    $("copyTableBtn").disabled = vis.length === 0;
 
     if (vis.length === 0) {
       area.innerHTML = '<div class="empty">' + (n === 0
@@ -400,8 +429,11 @@
         "Used " + esc(fmtDate(e.date)) + " · logged " + esc(fmtTime(e.ts)) +
         (e.by ? " by " + esc(e.by) : "");
       var note = e.note ? '<div class="row-note">' + esc(e.note) + "</div>" : "";
-      return '<article class="row">' +
-        '<div class="row-top"><span class="mono row-code">' + esc(e.code) + '</span>' + lot +
+      var rect = '<button type="button" class="rect' + (e.rectified ? " on" : "") + '" data-rect="' + esc(e.id) +
+        '" aria-pressed="' + (e.rectified ? "true" : "false") + '" title="' +
+        (e.rectified ? "Being rectified — click to unmark" : "Mark as being rectified") + '">\u2713</button>';
+      return '<article class="row' + (e.rectified ? " done" : "") + '">' +
+        '<div class="row-top">' + rect + '<span class="mono row-code">' + esc(e.code) + '</span>' + lot +
         '<span class="row-desc">' + esc(e.desc) + '</span>' +
         '<span class="mono row-qty">' + esc(fmtQty(e.qty)) + "</span></div>" +
         '<div class="row-bot"><div class="row-chips">' + tags + "</div>" +
@@ -439,6 +471,50 @@
     setTimeout(function () { $("qtyInput").focus(); }, 350);
   }
 
+  function toggleRect(id) {
+    var e = null;
+    for (var i = 0; i < S.entries.length; i++) if (S.entries[i].id === id) { e = S.entries[i]; break; }
+    if (!e) return;
+    var next = !e.rectified;
+    store.update(id, { rectified: next }).then(function () {
+      e.rectified = next;
+      renderLog();
+      toast(next ? "Marked as being rectified" : "Rectification unmarked");
+    }).catch(function () {
+      toast("Couldn't update — try again");
+    });
+  }
+
+  function copyTable() {
+    var vis = visibleEntries();
+    if (!vis.length) return;
+    var clean = function (c) { return String(c == null ? "" : c).replace(/[\t\n\r]+/g, " "); };
+    var head = ["Date used", "Code", "Description", "Lot", "Qty", "Shift", "Line(s)", "Entered by", "Notes"];
+    var data = vis.map(function (e) {
+      return [e.date, e.code, e.desc, e.lot || "", fmtQty(e.qty), e.shift || "", (e.lines || []).join(", "), e.by || "", e.note || ""];
+    });
+    var title = "MAS material adjustments for approval (" + vis.length + ")";
+    var tsv = title + "\n" + [head].concat(data).map(function (r) { return r.map(clean).join("\t"); }).join("\n");
+    var cellCss = "border:1px solid #8a8a8a;padding:4px 8px;";
+    var th = head.map(function (x) { return '<th style="' + cellCss + 'background:#efefef;text-align:left">' + esc(x) + "</th>"; }).join("");
+    var trs = data.map(function (r, i) {
+      var pretty = r.slice(); pretty[0] = fmtDate(vis[i].date);
+      return "<tr>" + pretty.map(function (c) { return '<td style="' + cellCss + '">' + esc(c) + "</td>"; }).join("") + "</tr>";
+    }).join("");
+    var html = '<div style="font:13px Arial,sans-serif"><div style="font-weight:bold;margin-bottom:6px">' + esc(title) +
+      '</div><table style="border-collapse:collapse;font:13px Arial,sans-serif"><tr>' + th + "</tr>" + trs + "</table></div>";
+    var done = function () { toast("Table copied — paste it into an email or Excel"); };
+    var fail = function () { toast("Couldn't copy — use Export CSV instead"); };
+    if (navigator.clipboard && window.ClipboardItem && navigator.clipboard.write) {
+      navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([tsv], { type: "text/plain" }),
+      })]).then(done).catch(function () { copyText(tsv).then(done).catch(fail); });
+    } else {
+      copyText(tsv).then(done).catch(fail);
+    }
+  }
+
   function refresh() {
     setStatus("loading");
     store.load().then(function (list) {
@@ -455,9 +531,9 @@
   function exportCsv() {
     var vis = visibleEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Date used", "Material code", "Description", "Lot", "Quantity", "Shift", "Lines", "Entered by", "Notes", "Logged at"]];
+    var rows = [["Date used", "Material code", "Description", "Lot", "Quantity", "Shift", "Lines", "Entered by", "Notes", "Rectified", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.code, e.desc, e.lot || "", e.qty, e.shift || "", (e.lines || []).join("; "), e.by || "", e.note || "", new Date(e.ts).toLocaleString()]);
+      rows.push([e.date, e.code, e.desc, e.lot || "", e.qty, e.shift || "", (e.lines || []).join("; "), e.by || "", e.note || "", e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -525,6 +601,7 @@
     $("clearBtn").addEventListener("click", clearForm);
     $("exampleBtn").addEventListener("click", loadExample);
     $("refreshBtn").addEventListener("click", refresh);
+    $("copyTableBtn").addEventListener("click", copyTable);
     $("exportBtn").addEventListener("click", exportCsv);
 
     $("searchInput").addEventListener("input", function () { S.ftext = this.value; renderLog(); });
@@ -533,6 +610,7 @@
     $("logArea").addEventListener("click", function (e) {
       var b = e.target.closest("button");
       if (!b) return;
+      if (b.hasAttribute("data-rect")) { toggleRect(b.getAttribute("data-rect")); return; }
       if (b.hasAttribute("data-reuse")) { reuse(b.getAttribute("data-reuse")); return; }
       if (b.hasAttribute("data-ask")) {
         S.confirmId = b.getAttribute("data-ask");
