@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Material Usage Log</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="head">
+    <div class="head-inner">
+      <div>
+        <div class="brand">
+          <span class="tick"></span>
+          <h1>Material Usage Log</h1>
+        </div>
+        <p class="sub" id="subline">Log what was used, when, and on which lines.</p>
+      </div>
+      <div class="head-right">
+        <span class="pill pill-warn" id="statusPill"><span class="dot"></span><span id="statusText">Loading…</span></span>
+        <span class="count" id="entryCount">0 entries</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- ================= new entry ================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>New entry</h2>
+        <div class="card-head-actions">
+          <button class="ghost hidden" id="clearBtn" type="button">Clear</button>
+          <button class="ghost" id="exampleBtn" type="button">Load example</button>
+        </div>
+      </div>
+
+      <div class="example-note hidden" id="exampleNote">
+        <strong>Example ticket:</strong> 250 of material <span class="mono">10498</span> (granulated sugar),
+        used today on Processing B and Processing C. Press <strong>Save entry</strong> to log it, or
+        <strong>Clear</strong> to start fresh.
+      </div>
+
+      <div class="field">
+        <label class="flabel" for="matInput">Material — type a code or name</label>
+        <div class="combo">
+          <input
+            id="matInput"
+            class="input"
+            placeholder="e.g. 10498 or &ldquo;granulated sugar&rdquo;"
+            autocomplete="off"
+          />
+          <div class="drop hidden" id="matDrop"></div>
+        </div>
+        <div class="picked hidden" id="pickedBox">
+          <span class="mono picked-code" id="pickedCode"></span>
+          <span class="picked-desc" id="pickedDesc"></span>
+        </div>
+      </div>
+
+      <div class="pair">
+        <div class="field">
+          <label class="flabel" for="qtyInput">Quantity</label>
+          <input id="qtyInput" class="input mono" type="number" min="0" step="any" inputmode="decimal" placeholder="0" />
+        </div>
+        <div class="field">
+          <label class="flabel" for="dateInput">When used</label>
+          <input id="dateInput" class="input mono" type="date" />
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Lines used on — select all that apply</span>
+        <div class="board" id="board"></div>
+      </div>
+
+      <div class="err hidden" id="errBox"></div>
+
+      <div class="actions">
+        <button class="save" id="saveBtn" type="button">Save entry</button>
+        <span class="sel-summary" id="selSummary"></span>
+      </div>
+    </section>
+
+    <!-- ================= usage log ================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Usage log</h2>
+        <div class="card-head-actions">
+          <button class="ghost hidden" id="refreshBtn" type="button">Refresh</button>
+          <button class="ghost" id="exportBtn" type="button" disabled>Export CSV (0)</button>
+        </div>
+      </div>
+
+      <div class="filters">
+        <input id="searchInput" class="input" placeholder="Search code or material…" />
+        <select id="lineFilter" class="input">
+          <option value="">All lines</option>
+        </select>
+      </div>
+
+      <div id="logArea"></div>
+    </section>
+
+    <p class="foot">
+      Item list: <span id="matCount">…</span> material codes loaded from the BOM &amp; MAS item list.
+      Unlisted codes can still be logged — they're marked &ldquo;not in item list.&rdquo;
+    </p>
+  </main>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="config.js"></script>
+  <script src="materials.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
