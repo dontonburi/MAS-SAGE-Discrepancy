@@ -59,32 +59,41 @@ There's a **Load example** button in the app that fills the form exactly like th
 2. In the project, open **SQL Editor**, paste this, and click **Run**:
 
    ```sql
-   create table usage_entries (
+   create table if not exists usage_entries (
      id uuid primary key default gen_random_uuid(),
      code text not null,
      description text not null,
-     lot text,
      qty numeric not null,
-     shift smallint,
-     entered_by text,
-     note text,
-     rectified boolean not null default false,
      used_on date not null,
      lines text[] not null,
      created_at timestamptz not null default now()
    );
 
+   alter table usage_entries
+     add column if not exists lot text,
+     add column if not exists shift smallint,
+     add column if not exists entered_by text,
+     add column if not exists note text,
+     add column if not exists rectified boolean not null default false;
+
    alter table usage_entries enable row level security;
+
+   drop policy if exists "team read"   on usage_entries;
+   drop policy if exists "team insert" on usage_entries;
+   drop policy if exists "team delete" on usage_entries;
+   drop policy if exists "team update" on usage_entries;
+
    create policy "team read"   on usage_entries for select using (true);
    create policy "team insert" on usage_entries for insert with check (true);
    create policy "team delete" on usage_entries for delete using (true);
    create policy "team update" on usage_entries for update using (true) with check (true);
    ```
 
-3. Go to **Project Settings → API** and copy two values: the **Project URL** and the **`anon` public key**.
+   This script is safe to run repeatedly — on a brand-new project or an existing table. It never
+   deletes data; it only creates whatever is missing.
+
 4. Paste both into `config.js`, commit, and push. Done — the header pill switches to **"Live shared log."**
 
-   *(Created the table from an older version of this README? Run this once in the SQL Editor to add any missing columns: `alter table usage_entries add column if not exists lot text, add column if not exists shift smallint, add column if not exists entered_by text, add column if not exists note text, add column if not exists rectified boolean not null default false;` — and if your policies predate the checkmark feature, also run `create policy "team update" on usage_entries for update using (true) with check (true);`)*
 
 Notes on that setup:
 

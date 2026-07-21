@@ -86,7 +86,14 @@
           headers: Object.assign({ Prefer: "return=representation" }, HEADERS),
           body: body,
         })
-          .then(function (r) { if (!r.ok) throw new Error("save " + r.status); return r.json(); })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().catch(function () { return {}; }).then(function (j) {
+                throw new Error(j.message || j.hint || ("HTTP " + r.status));
+              });
+            }
+            return r.json();
+          })
           .then(function (rows) { return norm(rows[0]); });
       },
       remove: function (id) {
@@ -365,8 +372,9 @@
         ? "Saved — " + saved.code + " on " + saved.lines.length + " line" + (saved.lines.length > 1 ? "s" : "")
         : "Saved on this device — " + saved.code);
       $("matInput").focus();
-    }).catch(function () {
-      showErr("Couldn't save the entry — check your connection and try again.");
+    }).catch(function (err) {
+      var why = err && err.message && err.message !== "Failed to fetch" ? err.message : "check your connection and try again";
+      showErr("Couldn't save the entry — " + why + ". (If this mentions a missing column, run the SQL update from the README.)");
     }).finally(function () {
       S.saving = false;
       $("saveBtn").disabled = false;
