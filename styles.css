@@ -194,7 +194,9 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
 .tbl td { padding: 7px 10px; border-bottom: 1px solid #eceee7; vertical-align: top; }
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr.done td { background: #f1f7f3; }
+.tbl tbody tr { cursor: pointer; }
 .tbl tr.picked td { background: var(--amber-soft); }
+.tbl tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--amber); }
 .c-sel { width: 30px; }
 .c-sel input { width: 15px; height: 15px; accent-color: var(--steel); cursor: pointer; vertical-align: middle; }
 .c-r { width: 34px; }
@@ -208,7 +210,7 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
 .c-act .ghost.sm { margin-left: 5px; }
 .rect {
   width: 20px; height: 20px; flex: none; padding: 0;
-  border: 1.5px solid var(--line); border-radius: 5px; background: #fff;
+  border: 1.5px solid var(--line); border-radius: 50%; background: #fff;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 13px; line-height: 1; color: transparent; transition: all 0.12s;
 }

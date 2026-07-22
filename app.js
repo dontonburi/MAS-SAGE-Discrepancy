@@ -444,7 +444,21 @@
       : "Copy table (" + vis.length + ")";
     $("copyTableBtn").disabled = vis.length === 0;
     var all = $("selAll");
-    if (all) all.checked = vis.length > 0 && selCount === vis.length;
+    if (all) {
+      all.checked = vis.length > 0 && selCount === vis.length;
+      all.indeterminate = selCount > 0 && selCount < vis.length;
+    }
+    $("clearSelBtn").classList.toggle("hidden", Object.keys(S.copySel).length === 0);
+  }
+
+  function setRowSel(id, on, tr) {
+    if (on) S.copySel[id] = true; else delete S.copySel[id];
+    if (tr) {
+      tr.classList.toggle("picked", on);
+      var cb = tr.querySelector("[data-sel]");
+      if (cb) cb.checked = on;
+    }
+    updateCopyLabel(visibleEntries());
   }
 
   function renderLog() {
@@ -455,7 +469,6 @@
     $("exportBtn").textContent = "Export CSV (" + vis.length + ")";
     $("exportBtn").disabled = vis.length === 0;
 
-
     if (vis.length === 0) {
       area.innerHTML = '<div class="empty">' + (n === 0
         ? "No usage logged yet. Fill out the ticket above — or press <strong>Load example</strong> to see how one is filled."
@@ -464,33 +477,89 @@
       return;
     }
 
-    var HEADS = '<th class="c-sel"><input type="checkbox" id="selAll" title="Select all shown" /></th>' +
-      '<th class="c-r"></th><th class="c-date">Batch/Production date</th><th>Item (MAS)</th>' +
-      '<th>Lot code</th><th>Description</th><th>Line</th><th>Shift</th><th class="c-qty">Qtty missing</th>' +
-      '<th>Note</th><th>Name</th><th></th>';
-    area.innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr>' + HEADS + "</tr></thead><tbody>" +
-      vis.map(function (e) {
-        var rect = '<button type="button" class="rect' + (e.rectified ? " on" : "") + '" data-rect="' + esc(e.id) +
-          '" aria-pressed="' + (e.rectified ? "true" : "false") + '" title="' +
-          (e.rectified ? "Being rectified — click to unmark" : "Mark as being rectified") + '">\u2713</button>';
-        var del = S.confirmId === e.id
-          ? '<button type="button" class="ghost sm danger" data-del="' + esc(e.id) + '">Confirm delete</button>'
-          : '<button type="button" class="ghost sm" data-ask="' + esc(e.id) + '">Delete</button>';
-        return '<tr class="' + (e.rectified ? "done" : "") + (S.copySel[e.id] ? " picked" : "") + '">' +
-          '<td class="c-sel"><input type="checkbox" data-sel="' + esc(e.id) + '"' + (S.copySel[e.id] ? " checked" : "") + ' /></td>' +
-          '<td class="c-r">' + rect + "</td>" +
-          '<td class="c-date">' + esc(fmtDate(e.date)) + "</td>" +
-          '<td class="c-code">' + esc(e.code) + "</td>" +
-          '<td class="c-lot">' + esc(e.lot || "") + "</td>" +
-          '<td class="c-desc">' + esc(e.desc) + "</td>" +
-          '<td class="c-line">' + esc((e.lines || []).join(", ")) + "</td>" +
-          "<td>" + esc((e.shifts || []).join(", ")) + "</td>" +
-          '<td class="c-qty">' + esc(fmtQty(e.qty)) + "</td>" +
-          '<td class="c-note">' + esc(e.note || "") + "</td>" +
-          "<td>" + esc(e.by || "") + "</td>" +
-          '<td class="c-act"><button type="button" class="ghost sm" data-reuse="' + esc(e.id) +
-          '" title="Refill the form with this material and lines">Reuse</button>' + del + "</td></tr>";
-      }).join("") + "</tbody></table></div>";
+    var mk = function (tag, cls, text) {
+      var el = document.createElement(tag);
+      if (cls) el.className = cls;
+      if (text != null) el.textContent = text;
+      return el;
+    };
+
+    var wrap = mk("div", "tbl-wrap");
+    var tbl = mk("table", "tbl");
+    var thead = document.createElement("thead");
+    var hr = document.createElement("tr");
+    var thSel = mk("th", "c-sel");
+    var selAll = document.createElement("input");
+    selAll.type = "checkbox";
+    selAll.id = "selAll";
+    selAll.title = "Select all shown";
+    thSel.appendChild(selAll);
+    hr.appendChild(thSel);
+    hr.appendChild(mk("th", "c-r", ""));
+    [["c-date", "Batch/Production date"], [null, "Item (MAS)"], [null, "Lot code"], [null, "Description"],
+     [null, "Line"], [null, "Shift"], ["c-qty", "Qtty missing"], [null, "Note"], [null, "Name"], [null, ""]
+    ].forEach(function (c) { hr.appendChild(mk("th", c[0] || "", c[1])); });
+    thead.appendChild(hr);
+    tbl.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    vis.forEach(function (e) {
+      var tr = document.createElement("tr");
+      tr.dataset.id = e.id;
+      if (e.rectified) tr.classList.add("done");
+      if (S.copySel[e.id]) tr.classList.add("picked");
+
+      var tdSel = mk("td", "c-sel");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.setAttribute("data-sel", e.id);
+      cb.checked = !!S.copySel[e.id];
+      tdSel.appendChild(cb);
+      tr.appendChild(tdSel);
+
+      var tdR = mk("td", "c-r");
+      var rb = mk("button", "rect" + (e.rectified ? " on" : ""), "\u2713");
+      rb.type = "button";
+      rb.setAttribute("data-rect", e.id);
+      rb.setAttribute("aria-pressed", e.rectified ? "true" : "false");
+      rb.title = e.rectified ? "Being rectified — click to unmark" : "Mark as being rectified";
+      tdR.appendChild(rb);
+      tr.appendChild(tdR);
+
+      tr.appendChild(mk("td", "c-date", fmtDate(e.date)));
+      tr.appendChild(mk("td", "c-code", e.code));
+      tr.appendChild(mk("td", "c-lot", e.lot || ""));
+      tr.appendChild(mk("td", "c-desc", e.desc));
+      tr.appendChild(mk("td", "c-line", (e.lines || []).join(", ")));
+      tr.appendChild(mk("td", null, (e.shifts || []).join(", ")));
+      tr.appendChild(mk("td", "c-qty", fmtQty(e.qty)));
+      tr.appendChild(mk("td", "c-note", e.note || ""));
+      tr.appendChild(mk("td", null, e.by || ""));
+
+      var tdA = mk("td", "c-act");
+      var ru = mk("button", "ghost sm", "Reuse");
+      ru.type = "button";
+      ru.setAttribute("data-reuse", e.id);
+      ru.title = "Refill the form with this material and lines";
+      tdA.appendChild(ru);
+      if (S.confirmId === e.id) {
+        var cd = mk("button", "ghost sm danger", "Confirm delete");
+        cd.type = "button";
+        cd.setAttribute("data-del", e.id);
+        tdA.appendChild(cd);
+      } else {
+        var dl = mk("button", "ghost sm", "Delete");
+        dl.type = "button";
+        dl.setAttribute("data-ask", e.id);
+        tdA.appendChild(dl);
+      }
+      tr.appendChild(tdA);
+      tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);
+    wrap.appendChild(tbl);
+    area.innerHTML = "";
+    area.appendChild(wrap);
     updateCopyLabel(vis);
   }
 
@@ -663,6 +732,7 @@
     $("clearBtn").addEventListener("click", clearForm);
     $("exampleBtn").addEventListener("click", loadExample);
     $("refreshBtn").addEventListener("click", refresh);
+    $("clearSelBtn").addEventListener("click", function () { S.copySel = {}; renderLog(); });
     $("copyTableBtn").addEventListener("click", copyTable);
     $("exportBtn").addEventListener("click", exportCsv);
 
@@ -679,15 +749,18 @@
         return;
       }
       if (t && t.getAttribute && t.getAttribute("data-sel")) {
-        var sid = t.getAttribute("data-sel");
-        if (t.checked) S.copySel[sid] = true; else delete S.copySel[sid];
-        var tr = t.closest("tr");
-        if (tr) tr.classList.toggle("picked", t.checked);
-        updateCopyLabel(visibleEntries());
+        setRowSel(t.getAttribute("data-sel"), t.checked, t.closest("tr"));
         return;
       }
       var b = e.target.closest("button");
-      if (!b) return;
+      if (!b) {
+        var rowEl = e.target.closest("tbody tr");
+        if (rowEl && rowEl.dataset.id) {
+          var dragging = window.getSelection ? window.getSelection().toString() : "";
+          if (!dragging) setRowSel(rowEl.dataset.id, !S.copySel[rowEl.dataset.id], rowEl);
+        }
+        return;
+      }
       if (b.hasAttribute("data-rect")) { toggleRect(b.getAttribute("data-rect")); return; }
       if (b.hasAttribute("data-reuse")) { reuse(b.getAttribute("data-reuse")); return; }
       if (b.hasAttribute("data-ask")) {
