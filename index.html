@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260723a" />
 </head>
 <body>
   <header class="head">
@@ -68,6 +68,10 @@
         <div class="field">
           <label class="flabel" for="lotInput">Lot code — optional</label>
           <input id="lotInput" class="input mono" placeholder="e.g. S340C" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label class="flabel" for="poInput">PO # — if no lot yet</label>
+          <input id="poInput" class="input mono" placeholder="e.g. 4500012345" autocomplete="off" />
         </div>
         <div class="field">
           <label class="flabel" for="qtyInput">Quantity</label>
@@ -146,8 +150,8 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js"></script>
-  <script src="materials.js"></script>
-  <script src="app.js"></script>
+  <script src="config.js?v=20260723a"></script>
+  <script src="materials.js?v=20260723a"></script>
+  <script src="app.js?v=20260723a"></script>
 </body>
 </html>

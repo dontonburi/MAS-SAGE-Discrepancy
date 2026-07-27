@@ -1,6 +1,6 @@
 # Material Usage Log
 
-A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. Tick the checkbox on any rows and the **Copy table** button copies just those (or the whole view if nothing is ticked) as a table — paste it straight into an email for management approval, or into Excel. Each entry also has a **checkmark** to track which discrepancies are being rectified. The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
+A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. The log is grouped by the day entries were added, each with a day checkbox — tick a day (or individual rows) and **Copy table** copies just those (or the whole view if nothing is ticked) as a table — paste it straight into an email for management approval, or into Excel. Each entry also has a **checkmark** to mark discrepancies as rectified — rectified rows show struck through. The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
 
 No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it runs.
 
@@ -38,7 +38,7 @@ No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it r
 ## How an entry is filled
 
 1. **Material** — type `10498` *or* "granulated sugar" and pick the match (code + description lock in together).
-2. **Lot code** — e.g. `S340C` (optional — leave blank if there isn't one).
+2. **Lot code** — e.g. `S340C` (optional). If the lot isn't defined yet, enter the **PO #** instead — the log shows whichever one exists.
 3. **Quantity** — e.g. `250`.
 4. **When used** — defaults to yesterday (the production day being reported).
 5. **Shift** — tap **1**, **2**, and/or **3** — all that apply.
@@ -75,7 +75,8 @@ There's a **Load example** button in the app that fills the form exactly like th
      add column if not exists entered_by text,
      add column if not exists note text,
      add column if not exists rectified boolean not null default false,
-     add column if not exists shifts smallint[];
+     add column if not exists shifts smallint[],
+     add column if not exists po text;
 
    alter table usage_entries enable row level security;
 

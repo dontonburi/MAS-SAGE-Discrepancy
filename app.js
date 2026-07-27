@@ -44,6 +44,15 @@
     d.setDate(d.getDate() - 1);
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
+  function enteredDay(ts) {
+    var d = new Date(ts || 0);
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+  function fmtDay(day) {
+    var p = (day || "").split("-").map(Number);
+    if (!p[0]) return day || "";
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
   function fmtDate(s) {
     var p = (s || "").split("-").map(Number);
     if (!p[0] || !p[1] || !p[2]) return s || "—";
@@ -75,7 +84,7 @@
     var norm = function (r) {
       return {
         id: r.id, code: r.code, desc: r.description, qty: Number(r.qty),
-        lot: r.lot || "",
+        lot: r.lot || "", po: r.po || "",
         shifts: (r.shifts && r.shifts.length ? r.shifts : (r.shift == null ? [] : [r.shift])).map(Number),
         by: r.entered_by || "", note: r.note || "", rectified: !!r.rectified,
         date: r.used_on, lines: r.lines || [], ts: Date.parse(r.created_at) || Date.now(),
@@ -89,7 +98,7 @@
           .then(function (rows) { return rows.map(norm); });
       },
       save: function (e) {
-        var body = JSON.stringify([{ code: e.code, description: e.desc, qty: e.qty, lot: e.lot || null, shifts: e.shifts, entered_by: e.by || null, note: e.note || null, used_on: e.date, lines: e.lines }]);
+        var body = JSON.stringify([{ code: e.code, description: e.desc, qty: e.qty, lot: e.lot || null, po: e.po || null, shifts: e.shifts, entered_by: e.by || null, note: e.note || null, used_on: e.date, lines: e.lines }]);
         return fetch(BASE, {
           method: "POST",
           headers: Object.assign({ Prefer: "return=representation" }, HEADERS),
@@ -317,7 +326,7 @@
 
   /* ---------------- form actions ---------------- */
   function syncClearBtn() {
-    var dirty = S.sel || $("matInput").value || $("qtyInput").value || $("lotInput").value || $("noteInput").value || S.shifts.length || S.linesSel.length;
+    var dirty = S.sel || $("matInput").value || $("qtyInput").value || $("lotInput").value || $("poInput").value || $("noteInput").value || S.shifts.length || S.linesSel.length;
     $("clearBtn").classList.toggle("hidden", !dirty);
   }
   function showErr(msg) { var b = $("errBox"); b.textContent = msg; b.classList.remove("hidden"); }
@@ -349,6 +358,7 @@
     clearPick();
     $("matInput").value = "";
     $("lotInput").value = "";
+    $("poInput").value = "";
     $("qtyInput").value = "";
     $("noteInput").value = "";
     $("dateInput").value = yesterdayStr();
@@ -377,7 +387,7 @@
 
     var entry = {
       code: S.sel.c, desc: S.sel.d, qty: Number(qty), date: date,
-      lot: $("lotInput").value.trim(), shifts: S.shifts.slice().sort(),
+      lot: $("lotInput").value.trim(), po: $("poInput").value.trim(), shifts: S.shifts.slice().sort(),
       by: getName(), note: $("noteInput").value.trim(), rectified: false,
       lines: ALL_LINES.filter(function (l) { return S.linesSel.indexOf(l) !== -1; }),
     };
@@ -389,6 +399,7 @@
       clearPick();
       $("matInput").value = "";
       $("lotInput").value = "";
+      $("poInput").value = "";
       $("qtyInput").value = "";
       $("noteInput").value = "";
       try { localStorage.setItem(NAME_KEY, saved.by || ""); } catch (e2) {}
@@ -429,9 +440,12 @@
     return S.entries.filter(function (e) {
       if (S.fdate && e.date !== S.fdate) return false;
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
-      if (q && (e.code + " " + e.desc + " " + (e.lot || "") + " " + (e.by || "") + " " + (e.note || "")).toUpperCase().indexOf(q) === -1) return false;
+      if (q && (e.code + " " + e.desc + " " + (e.lot || "") + " " + (e.po || "") + " " + (e.by || "") + " " + (e.note || "")).toUpperCase().indexOf(q) === -1) return false;
       return true;
     }).sort(function (a, b) {
+      var da = enteredDay(a.ts), db = enteredDay(b.ts);
+      if (da < db) return 1;
+      if (da > db) return -1;
       if (a.date < b.date) return 1;
       if (a.date > b.date) return -1;
       return (b.ts || 0) - (a.ts || 0);
@@ -459,7 +473,20 @@
       var cb = tr.querySelector("[data-sel]");
       if (cb) cb.checked = on;
     }
-    updateCopyLabel(visibleEntries());
+    var vis = visibleEntries();
+    var ent = null;
+    for (var i = 0; i < S.entries.length; i++) if (S.entries[i].id === id) { ent = S.entries[i]; break; }
+    if (ent) {
+      var day = enteredDay(ent.ts);
+      var gcb = document.querySelector('#logArea [data-grpsel="' + day + '"]');
+      if (gcb) {
+        var rowsD = vis.filter(function (r) { return enteredDay(r.ts) === day; });
+        var c = rowsD.filter(function (r) { return S.copySel[r.id]; }).length;
+        gcb.checked = c > 0 && c === rowsD.length;
+        gcb.indeterminate = c > 0 && c < rowsD.length;
+      }
+    }
+    updateCopyLabel(vis);
   }
 
   function renderLog() {
@@ -504,7 +531,14 @@
     tbl.appendChild(thead);
 
     var tbody = document.createElement("tbody");
+    var days = [], byDay = {};
     vis.forEach(function (e) {
+      var d = enteredDay(e.ts);
+      if (!byDay[d]) { byDay[d] = []; days.push(d); }
+      byDay[d].push(e);
+    });
+
+    var renderRow = function (e) {
       var tr = document.createElement("tr");
       tr.dataset.id = e.id;
       if (e.rectified) tr.classList.add("is-done");
@@ -529,7 +563,7 @@
 
       tr.appendChild(mk("td", "c-date", fmtDate(e.date)));
       tr.appendChild(mk("td", "c-code", e.code));
-      tr.appendChild(mk("td", "c-lot", e.lot || ""));
+      tr.appendChild(mk("td", "c-lot", e.lot || (e.po ? "PO " + e.po : "")));
       tr.appendChild(mk("td", "c-desc", e.desc));
       tr.appendChild(mk("td", "c-line", (e.lines || []).join(", ")));
       tr.appendChild(mk("td", null, (e.shifts || []).join(", ")));
@@ -556,7 +590,30 @@
       }
       tr.appendChild(tdA);
       tbody.appendChild(tr);
+    };
+
+    days.forEach(function (day) {
+      var rows = byDay[day];
+      var gtr = document.createElement("tr");
+      gtr.className = "grp";
+      gtr.dataset.grp = day;
+      var gtd = mk("td", "c-sel");
+      var gcb = document.createElement("input");
+      gcb.type = "checkbox";
+      gcb.setAttribute("data-grpsel", day);
+      gcb.title = "Select everything entered this day";
+      var selInDay = rows.filter(function (r) { return S.copySel[r.id]; }).length;
+      gcb.checked = selInDay > 0 && selInDay === rows.length;
+      gcb.indeterminate = selInDay > 0 && selInDay < rows.length;
+      gtd.appendChild(gcb);
+      gtr.appendChild(gtd);
+      var lab = mk("td", "grp-lab", "Entered " + fmtDay(day) + " \u00b7 " + rows.length + (rows.length === 1 ? " entry" : " entries"));
+      lab.colSpan = 11;
+      gtr.appendChild(lab);
+      tbody.appendChild(gtr);
+      rows.forEach(renderRow);
     });
+
     tbl.appendChild(tbody);
     wrap.appendChild(tbl);
     area.innerHTML = "";
@@ -586,6 +643,7 @@
     S.linesSel = (e.lines || []).filter(function (l) { return ALL_LINES.indexOf(l) !== -1; });
     syncBoard();
     $("lotInput").value = e.lot || "";
+    $("poInput").value = e.po || "";
     $("qtyInput").value = "";
     $("dateInput").value = yesterdayStr();
     $("exampleNote").classList.add("hidden");
@@ -613,11 +671,16 @@
     var vis = chosen.length ? chosen : pool;
     if (!vis.length) return;
     var clean = function (c) { return String(c == null ? "" : c).replace(/[\t\n\r]+/g, " "); };
-    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name"];
+    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Date entered"];
     var data = vis.map(function (e) {
-      return [e.date, e.code, e.lot || "", e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), e.note || "", e.by || ""];
+      return [e.date, e.code, e.lot || (e.po ? "PO " + e.po : ""), e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), e.note || "", e.by || "", fmtDate(enteredDay(e.ts))];
     });
-    var title = "MAS material adjustments for approval (" + vis.length + ")";
+    var daysIn = {};
+    vis.forEach(function (e) { daysIn[enteredDay(e.ts)] = true; });
+    var dayKeys = Object.keys(daysIn);
+    var title = "MAS material adjustments for approval" +
+      (dayKeys.length === 1 ? " \u2014 entered " + fmtDate(dayKeys[0]) : "") +
+      " (" + vis.length + ")";
     var tsv = title + "\n" + [head].concat(data).map(function (r) { return r.map(clean).join("\t"); }).join("\n");
     var cellCss = "border:1px solid #8a8a8a;padding:4px 8px;";
     var th = head.map(function (x) { return '<th style="' + cellCss + 'background:#efefef;text-align:left">' + esc(x) + "</th>"; }).join("");
@@ -655,9 +718,9 @@
   function exportCsv() {
     var vis = visibleEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Rectified", "Logged at"]];
+    var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "PO", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Date entered", "Rectified", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.code, e.lot || "", e.desc, (e.lines || []).join("; "), (e.shifts || []).join(", "), e.qty, e.note || "", e.by || "", e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
+      rows.push([e.date, e.code, e.lot || "", e.po || "", e.desc, (e.lines || []).join("; "), (e.shifts || []).join(", "), e.qty, e.note || "", e.by || "", enteredDay(e.ts), e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -713,6 +776,7 @@
 
     $("qtyInput").addEventListener("input", syncClearBtn);
     $("lotInput").addEventListener("input", syncClearBtn);
+    $("poInput").addEventListener("input", syncClearBtn);
     $("noteInput").addEventListener("input", syncClearBtn);
     $("shiftGroup").addEventListener("click", function (e) {
       var b = e.target.closest(".chip");
@@ -751,6 +815,15 @@
         renderLog();
         return;
       }
+      if (t && t.getAttribute && t.getAttribute("data-grpsel")) {
+        var gday = t.getAttribute("data-grpsel");
+        var gon = t.checked;
+        visibleEntries().forEach(function (en) {
+          if (enteredDay(en.ts) === gday) { if (gon) S.copySel[en.id] = true; else delete S.copySel[en.id]; }
+        });
+        renderLog();
+        return;
+      }
       if (t && t.getAttribute && t.getAttribute("data-sel")) {
         setRowSel(t.getAttribute("data-sel"), t.checked, t.closest("tr"));
         return;
@@ -758,9 +831,15 @@
       var b = e.target.closest("button");
       if (!b) {
         var rowEl = e.target.closest("tbody tr");
-        if (rowEl && rowEl.dataset.id) {
-          var dragging = window.getSelection ? window.getSelection().toString() : "";
-          if (!dragging) setRowSel(rowEl.dataset.id, !S.copySel[rowEl.dataset.id], rowEl);
+        var dragging = window.getSelection ? window.getSelection().toString() : "";
+        if (rowEl && rowEl.dataset.id && !dragging) {
+          setRowSel(rowEl.dataset.id, !S.copySel[rowEl.dataset.id], rowEl);
+        } else if (rowEl && rowEl.dataset.grp && !dragging) {
+          var gd = rowEl.dataset.grp;
+          var rowsG = visibleEntries().filter(function (r) { return enteredDay(r.ts) === gd; });
+          var allSel = rowsG.length > 0 && rowsG.every(function (r) { return S.copySel[r.id]; });
+          rowsG.forEach(function (r) { if (allSel) delete S.copySel[r.id]; else S.copySel[r.id] = true; });
+          renderLog();
         }
         return;
       }

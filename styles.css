@@ -83,7 +83,7 @@ h1 {
 }
 .input:focus { border-color: var(--steel); outline: none; }
 .input.mono { font-family: "IBM Plex Mono"; font-weight: 500; }
-.quad { display: grid; grid-template-columns: 1.1fr 0.9fr 1.1fr auto; gap: 14px; }
+.quad { display: grid; grid-template-columns: 1fr 1fr 0.8fr 1.1fr auto; gap: 12px; }
 .noterow { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
 @media (max-width: 760px) { .noterow { grid-template-columns: 1fr; } }
 .noterow .field { margin-bottom: 12px; }
@@ -193,7 +193,13 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
 .tbl th.c-qty { text-align: right; }
 .tbl td { padding: 7px 10px; border-bottom: 1px solid #eceee7; vertical-align: top; }
 .tbl tr:last-child td { border-bottom: none; }
-.tbl tr.is-done > td { background: #f1f7f3; }
+.tbl tr.is-done > td { background: #f1f7f3; text-decoration: line-through; color: #7d8a93; }
+.tbl tr.is-done > td.c-sel, .tbl tr.is-done > td.c-r, .tbl tr.is-done > td.c-act { text-decoration: none; }
+.tbl tr.grp > td {
+  background: #e9ece3; border-top: 2px solid var(--line);
+  font-family: "Barlow Condensed"; font-weight: 700; font-size: 13px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #3b4a55; cursor: pointer;
+}
 .tbl tbody tr { display: table-row; cursor: pointer; }
 .tbl tr.is-sel > td { background: var(--amber-soft); }
 .c-sel { width: 30px; }
