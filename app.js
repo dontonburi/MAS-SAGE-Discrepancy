@@ -162,7 +162,7 @@
   /* ---------------- state ---------------- */
   var S = {
     entries: [], sel: null, linesSel: [], shifts: [], copySel: {}, shown: [], hi: 0,
-    confirmId: null, confirmTimer: null, toastTimer: null, saving: false,
+    confirmId: null, confirmTimer: null, toastTimer: null, saving: false, editNoteId: null,
     ftext: "", fline: "", fdate: "",
   };
 
@@ -460,8 +460,11 @@
     $("copyTableBtn").disabled = vis.length === 0;
     var all = $("selAll");
     if (all) {
-      all.checked = vis.length > 0 && selCount === vis.length;
-      all.indeterminate = selCount > 0 && selCount < vis.length;
+      var elig = vis.filter(function (e) { return !e.rectified; });
+      var eligSel = elig.filter(function (e) { return S.copySel[e.id]; }).length;
+      all.disabled = elig.length === 0;
+      all.checked = elig.length > 0 && eligSel === elig.length;
+      all.indeterminate = !all.checked && selCount > 0;
     }
     $("clearSelBtn").classList.toggle("hidden", Object.keys(S.copySel).length === 0);
   }
@@ -481,9 +484,12 @@
       var gcb = document.querySelector('#logArea [data-grpsel="' + day + '"]');
       if (gcb) {
         var rowsD = vis.filter(function (r) { return enteredDay(r.ts) === day; });
-        var c = rowsD.filter(function (r) { return S.copySel[r.id]; }).length;
-        gcb.checked = c > 0 && c === rowsD.length;
-        gcb.indeterminate = c > 0 && c < rowsD.length;
+        var eligD = rowsD.filter(function (r) { return !r.rectified; });
+        var cE = eligD.filter(function (r) { return S.copySel[r.id]; }).length;
+        var cAll = rowsD.filter(function (r) { return S.copySel[r.id]; }).length;
+        gcb.disabled = eligD.length === 0;
+        gcb.checked = eligD.length > 0 && cE === eligD.length;
+        gcb.indeterminate = !gcb.checked && cAll > 0;
       }
     }
     updateCopyLabel(vis);
@@ -568,10 +574,32 @@
       tr.appendChild(mk("td", "c-line", (e.lines || []).join(", ")));
       tr.appendChild(mk("td", null, (e.shifts || []).join(", ")));
       tr.appendChild(mk("td", "c-qty", fmtQty(e.qty)));
-      tr.appendChild(mk("td", "c-note", e.note || ""));
+      var tdN = mk("td", "c-note");
+      if (S.editNoteId === e.id) {
+        var ta = document.createElement("textarea");
+        ta.className = "note-ta";
+        ta.value = e.note || "";
+        ta.setAttribute("data-noteta", e.id);
+        tdN.appendChild(ta);
+        var nba = mk("div", "note-edit-actions");
+        var sv = mk("button", "ghost sm", "Save");
+        sv.type = "button"; sv.setAttribute("data-notesave", e.id);
+        var cx = mk("button", "ghost sm", "Cancel");
+        cx.type = "button"; cx.setAttribute("data-notecancel", e.id);
+        nba.appendChild(sv); nba.appendChild(cx);
+        tdN.appendChild(nba);
+      } else {
+        tdN.textContent = e.note || "";
+      }
+      tr.appendChild(tdN);
       tr.appendChild(mk("td", null, e.by || ""));
 
       var tdA = mk("td", "c-act");
+      var nb = mk("button", "ghost sm", "Note");
+      nb.type = "button";
+      nb.setAttribute("data-noteedit", e.id);
+      nb.title = "Add or edit the note — for context found later";
+      tdA.appendChild(nb);
       var ru = mk("button", "ghost sm", "Reuse");
       ru.type = "button";
       ru.setAttribute("data-reuse", e.id);
@@ -602,9 +630,12 @@
       gcb.type = "checkbox";
       gcb.setAttribute("data-grpsel", day);
       gcb.title = "Select everything entered this day";
-      var selInDay = rows.filter(function (r) { return S.copySel[r.id]; }).length;
-      gcb.checked = selInDay > 0 && selInDay === rows.length;
-      gcb.indeterminate = selInDay > 0 && selInDay < rows.length;
+      var elig = rows.filter(function (r) { return !r.rectified; });
+      var eligSel = elig.filter(function (r) { return S.copySel[r.id]; }).length;
+      var anySel = rows.filter(function (r) { return S.copySel[r.id]; }).length;
+      gcb.disabled = elig.length === 0;
+      gcb.checked = elig.length > 0 && eligSel === elig.length;
+      gcb.indeterminate = !gcb.checked && anySel > 0;
       gtd.appendChild(gcb);
       gtr.appendChild(gtd);
       var lab = mk("td", "grp-lab", "Entered " + fmtDay(day) + " \u00b7 " + rows.length + (rows.length === 1 ? " entry" : " entries"));
@@ -700,6 +731,20 @@
     } else {
       copyText(tsv).then(done).catch(fail);
     }
+  }
+
+  function saveNote(id) {
+    var ta = document.querySelector('[data-noteta="' + id + '"]');
+    if (!ta) return;
+    var v = ta.value.trim();
+    store.update(id, { note: v }).then(function () {
+      for (var i = 0; i < S.entries.length; i++) if (S.entries[i].id === id) { S.entries[i].note = v; break; }
+      S.editNoteId = null;
+      renderLog();
+      toast("Note updated");
+    }).catch(function () {
+      toast("Couldn't update the note — try again");
+    });
   }
 
   function refresh() {
@@ -806,12 +851,21 @@
     $("dateFilter").addEventListener("input", function () { S.fdate = this.value; renderLog(); });
     $("dateFilter").addEventListener("change", function () { S.fdate = this.value; renderLog(); });
 
+    $("logArea").addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && e.target.getAttribute && e.target.getAttribute("data-noteta")) {
+        S.editNoteId = null;
+        renderLog();
+      }
+    });
     $("logArea").addEventListener("click", function (e) {
       var t = e.target;
       if (t && t.id === "selAll") {
         var visNow = visibleEntries();
         var on = t.checked;
-        visNow.forEach(function (en) { if (on) S.copySel[en.id] = true; else delete S.copySel[en.id]; });
+        visNow.forEach(function (en) {
+          if (on) { if (!en.rectified) S.copySel[en.id] = true; }
+          else delete S.copySel[en.id];
+        });
         renderLog();
         return;
       }
@@ -819,7 +873,9 @@
         var gday = t.getAttribute("data-grpsel");
         var gon = t.checked;
         visibleEntries().forEach(function (en) {
-          if (enteredDay(en.ts) === gday) { if (gon) S.copySel[en.id] = true; else delete S.copySel[en.id]; }
+          if (enteredDay(en.ts) !== gday) return;
+          if (gon) { if (!en.rectified) S.copySel[en.id] = true; }
+          else delete S.copySel[en.id];
         });
         renderLog();
         return;
@@ -828,6 +884,7 @@
         setRowSel(t.getAttribute("data-sel"), t.checked, t.closest("tr"));
         return;
       }
+      if (e.target.closest && e.target.closest("textarea")) return;
       var b = e.target.closest("button");
       if (!b) {
         var rowEl = e.target.closest("tbody tr");
@@ -837,12 +894,25 @@
         } else if (rowEl && rowEl.dataset.grp && !dragging) {
           var gd = rowEl.dataset.grp;
           var rowsG = visibleEntries().filter(function (r) { return enteredDay(r.ts) === gd; });
-          var allSel = rowsG.length > 0 && rowsG.every(function (r) { return S.copySel[r.id]; });
-          rowsG.forEach(function (r) { if (allSel) delete S.copySel[r.id]; else S.copySel[r.id] = true; });
+          var eligG = rowsG.filter(function (r) { return !r.rectified; });
+          var allSel = eligG.length > 0 && eligG.every(function (r) { return S.copySel[r.id]; });
+          rowsG.forEach(function (r) {
+            if (allSel) delete S.copySel[r.id];
+            else if (!r.rectified) S.copySel[r.id] = true;
+          });
           renderLog();
         }
         return;
       }
+      if (b.hasAttribute("data-noteedit")) {
+        S.editNoteId = b.getAttribute("data-noteedit");
+        renderLog();
+        var ta = document.querySelector('[data-noteta]');
+        if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+        return;
+      }
+      if (b.hasAttribute("data-notesave")) { saveNote(b.getAttribute("data-notesave")); return; }
+      if (b.hasAttribute("data-notecancel")) { S.editNoteId = null; renderLog(); return; }
       if (b.hasAttribute("data-rect")) { toggleRect(b.getAttribute("data-rect")); return; }
       if (b.hasAttribute("data-reuse")) { reuse(b.getAttribute("data-reuse")); return; }
       if (b.hasAttribute("data-ask")) {
