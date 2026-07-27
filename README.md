@@ -1,6 +1,6 @@
 # Material Usage Log
 
-A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. The log is grouped by the day entries were added, each with a day checkbox — tick a day (or individual rows) and **Copy table** copies just those (or the whole view if nothing is ticked) as a table — paste it straight into an email for management approval, or into Excel. Each entry also has a **checkmark** to mark discrepancies as rectified — rectified rows show struck through. The full item list — 3,273 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
+A small website for the team to record material usage: **material code, lot, quantity, date used, shift (1/2/3), which production lines** (multi-select), **who entered it, and optional notes**. The log is grouped by the day entries were added, each with a day checkbox — tick a day (or individual rows) and **Copy table** copies just those (or the whole view if nothing is ticked) as a table — paste it straight into an email for management approval, or into Excel. Each entry also has a **checkmark** to mark discrepancies as rectified — rectified rows show struck through. The full item list — 4,214 material codes and descriptions from the BOM / MAS item list — is built in, so the description fills itself when a code is picked.
 
 No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it runs.
 
