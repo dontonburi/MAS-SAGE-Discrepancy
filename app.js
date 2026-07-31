@@ -460,19 +460,13 @@
       return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     };
     var cut3 = dayCut(3);
-    // Default view: something open -> every open entry (any age);
-    //               everything resolved -> all records from the last 3 days
-    var recentMode = null;
-    if (S.fstatus === "recent") {
-      recentMode = S.entries.some(function (e) { return !e.rectified; }) ? "open" : "all3";
-    }
+    // Default "Open + rectified" view: every open entry (any age),
+    // plus rectified entries entered within the last 3 days.
+    // (Once everything is resolved, that equals "all records from the last 3 days.")
     return S.entries.filter(function (e) {
       if (S.fstatus === "open" && e.rectified) return false;
       if (S.fstatus === "resolved" && !e.rectified) return false;
-      if (S.fstatus === "recent") {
-        if (recentMode === "open" && e.rectified) return false;
-        if (recentMode === "all3" && enteredDay(e.ts) < cut3) return false;
-      }
+      if (S.fstatus === "recent" && e.rectified && enteredDay(e.ts) < cut3) return false;
       if (S.fname && (e.by || "") !== S.fname) return false;
       if (S.fdate && e.date !== S.fdate) return false;
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
