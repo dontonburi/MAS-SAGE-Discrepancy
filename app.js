@@ -540,8 +540,14 @@
     nf.value = S.fname;
   }
 
+  function syncResetBtn() {
+    var active = S.ftext || S.fdate || S.fname || S.fline || S.fstatus !== "recent";
+    $("resetFilters").classList.toggle("hidden", !active);
+  }
+
   function renderLog() {
     syncNameFilter();
+    syncResetBtn();
     var area = $("logArea");
     var vis = visibleEntries();
     var n = S.entries.length;
@@ -933,6 +939,15 @@
     $("lineFilter").addEventListener("change", function () { S.fline = this.value; renderLog(); });
     $("statusFilter").addEventListener("change", function () { S.fstatus = this.value; renderLog(); });
     $("nameFilter").addEventListener("change", function () { S.fname = this.value; renderLog(); });
+    $("resetFilters").addEventListener("click", function () {
+      S.ftext = ""; S.fdate = ""; S.fname = ""; S.fline = ""; S.fstatus = "recent";
+      $("searchInput").value = "";
+      $("dateFilter").value = "";
+      $("nameFilter").value = "";
+      $("lineFilter").value = "";
+      $("statusFilter").value = "recent";
+      renderLog();
+    });
     $("dateFilter").addEventListener("input", function () { S.fdate = this.value; renderLog(); });
     $("dateFilter").addEventListener("change", function () { S.fdate = this.value; renderLog(); });
 

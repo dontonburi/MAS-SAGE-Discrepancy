@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="styles.css?v=20260730a" />
+  <link rel="stylesheet" href="styles.css?v=20260730b" />
 </head>
 <body>
   <header class="head">
@@ -125,38 +125,47 @@
         <h2 class="label"><span class="sq"></span>Usage log</h2>
         <div class="card-head-actions">
           <button class="ghost hidden" id="refreshBtn" type="button">Refresh</button>
-          <button class="ghost" id="selectAllBtn" type="button" title="Select every row shown, including resolved">Select all</button>
-        <button class="ghost" id="selectAllBtn" type="button" title="Select every open row currently shown">Select all</button>
-        <button class="ghost hidden" id="clearSelBtn" type="button">Clear selection</button>
-        <button class="ghost" id="copyTableBtn" type="button" disabled>Copy table (0)</button>
-        <button class="ghost" id="exportBtn" type="button" disabled>Export CSV (0)</button>
+          <button class="ghost" id="selectAllBtn" type="button" title="Select every open row currently shown">Select all</button>
+          <button class="ghost hidden" id="clearSelBtn" type="button">Clear selection</button>
+          <button class="ghost accent" id="copyTableBtn" type="button" disabled>Copy table (0)</button>
+          <button class="ghost" id="exportBtn" type="button" disabled>Export CSV (0)</button>
         </div>
       </div>
 
       <div class="filters">
-        <input id="searchInput" class="input" placeholder="Search code, material, lot, or name…" />
-        <input id="dateFilter" class="input mono" type="date" title="Filter by batch/production date" />
-        <select id="statusFilter" class="input" title="Filter by status">
-          <option value="recent">Open + recent</option>
-          <option value="open">Open only</option>
-          <option value="resolved">Resolved only</option>
-          <option value="all">Everything</option>
-        </select>
-        <select id="nameFilter" class="input" title="Filter by who entered it">
-          <option value="">All names</option>
-        </select>
-        <select id="statusFilter" class="input" title="Resolved entries older than 5 days are tucked away by default">
-          <option value="">Active (default)</option>
-          <option value="open">Unresolved only</option>
-          <option value="resolved">Resolved only</option>
-          <option value="all">Everything</option>
-        </select>
-        <select id="nameFilter" class="input">
-          <option value="">All names</option>
-        </select>
-        <select id="lineFilter" class="input">
-          <option value="">All lines</option>
-        </select>
+        <div class="f f-grow">
+          <span class="fl">Search</span>
+          <input id="searchInput" class="input" placeholder="Code, material, lot, PO, or name…" />
+        </div>
+        <div class="f">
+          <span class="fl">Production date</span>
+          <input id="dateFilter" class="input mono" type="date" />
+        </div>
+        <div class="f">
+          <span class="fl">Status</span>
+          <select id="statusFilter" class="input">
+            <option value="recent">Open + recent</option>
+            <option value="open">Open only</option>
+            <option value="resolved">Resolved only</option>
+            <option value="all">Everything</option>
+          </select>
+        </div>
+        <div class="f">
+          <span class="fl">Name</span>
+          <select id="nameFilter" class="input">
+            <option value="">All names</option>
+          </select>
+        </div>
+        <div class="f">
+          <span class="fl">Line</span>
+          <select id="lineFilter" class="input">
+            <option value="">All lines</option>
+          </select>
+        </div>
+        <div class="f">
+          <span class="fl">&nbsp;</span>
+          <button class="ghost hidden" id="resetFilters" type="button">✕ Reset</button>
+        </div>
       </div>
 
       <div id="logArea"></div>
@@ -185,8 +194,8 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js?v=20260730a"></script>
-  <script src="materials.js?v=20260730a"></script>
-  <script src="app.js?v=20260730a"></script>
+  <script src="config.js?v=20260730b"></script>
+  <script src="materials.js?v=20260730b"></script>
+  <script src="app.js?v=20260730b"></script>
 </body>
 </html>
