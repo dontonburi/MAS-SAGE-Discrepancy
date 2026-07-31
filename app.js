@@ -50,11 +50,6 @@
     d.setDate(d.getDate() - 1);
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
-  function cutoffDay() {
-    var d = new Date();
-    d.setDate(d.getDate() - 5);
-    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-  }
   function enteredDay(ts) {
     var d = new Date(ts || 0);
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
@@ -174,7 +169,7 @@
   var S = {
     entries: [], sel: null, linesSel: [], shifts: [], copySel: {}, shown: [], hi: 0,
     confirmId: null, confirmTimer: null, toastTimer: null, saving: false, editNoteId: null,
-    ftext: "", fline: "", fdate: "", fstatus: "recent", fname: "", fstatus: "", fname: "",
+    ftext: "", fline: "", fdate: "", fstatus: "recent", fname: "",
   };
 
   /* ---------------- init ---------------- */
@@ -459,11 +454,35 @@
 
   function visibleEntries() {
     var q = S.ftext.trim().toUpperCase();
-    var cut = cutoffDay();
+    var dayCut = function (n) {
+      var d = new Date();
+      d.setDate(d.getDate() - n);
+      return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    };
+    var cut5 = dayCut(5), cut3 = dayCut(3);
+    // Smart default view:
+    //   something open -> only open entries from the last 5 days
+    //                     (if the only open ones are older, show those instead)
+    //   all resolved   -> every record from the last 3 days
+    var recentMode = null;
+    if (S.fstatus === "recent") {
+      var anyOpen = false, anyOpenFresh = false;
+      S.entries.forEach(function (e) {
+        if (!e.rectified) {
+          anyOpen = true;
+          if (enteredDay(e.ts) >= cut5) anyOpenFresh = true;
+        }
+      });
+      recentMode = !anyOpen ? "all3" : anyOpenFresh ? "open5" : "openAll";
+    }
     return S.entries.filter(function (e) {
       if (S.fstatus === "open" && e.rectified) return false;
       if (S.fstatus === "resolved" && !e.rectified) return false;
-      if (S.fstatus === "" && e.rectified && enteredDay(e.ts) < cut) return false;
+      if (S.fstatus === "recent") {
+        if (recentMode === "all3") { if (enteredDay(e.ts) < cut3) return false; }
+        else if (recentMode === "open5") { if (e.rectified || enteredDay(e.ts) < cut5) return false; }
+        else if (e.rectified) return false;
+      }
       if (S.fname && (e.by || "") !== S.fname) return false;
       if (S.fdate && e.date !== S.fdate) return false;
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
@@ -558,9 +577,12 @@
     $("exportBtn").disabled = n === 0;
 
     if (vis.length === 0) {
+      var allClear = S.fstatus === "recent" && !S.ftext && !S.fdate && !S.fname && !S.fline && n > 0;
       area.innerHTML = '<div class="empty">' + (n === 0
         ? "No usage logged yet. Fill out the ticket above — or press <strong>Load example</strong> to see how one is filled."
-        : "No entries match these filters.") + "</div>";
+        : allClear
+          ? "All caught up — everything is resolved and nothing new in the last 3 days. Set Status to \u201CEverything\u201D to browse the history."
+          : "No entries match these filters.") + "</div>";
       updateCopyLabel(vis);
       return;
     }
