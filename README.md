@@ -103,6 +103,32 @@ Notes on that setup:
 - Those policies let **anyone who has your site URL** add or delete entries — same as a shared clipboard on the floor. Keep the link internal. If you later want logins or read-only viewers, Supabase Auth can be added on top.
 - Records can always be pulled back out with the **Export CSV** button, filtered or in full.
 
+## Paperwork compliance page
+
+`compliance.html` is a second page for logging documentation errors — date of production, shift (one per record, so blame lands cleanly), lines involved, and type of error (editable list at the top of `compliance.js`, plus an "Other" option). The scoreboard above the records shows totals by shift, by error type, and by line, plus a week-by-week matrix per shift so improvement is visible over time; **Copy summary** puts that matrix on the clipboard as a paste-ready table. CSV export (full history) uses the same password as the usage log. Records live in their own table — run this once in the Supabase SQL Editor:
+
+```sql
+create table if not exists compliance_entries (
+  id uuid primary key default gen_random_uuid(),
+  prod_date date not null,
+  shift smallint not null,
+  lines text[] not null,
+  error_type text not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+alter table compliance_entries enable row level security;
+
+drop policy if exists "team read"   on compliance_entries;
+drop policy if exists "team insert" on compliance_entries;
+drop policy if exists "team delete" on compliance_entries;
+
+create policy "team read"   on compliance_entries for select using (true);
+create policy "team insert" on compliance_entries for insert with check (true);
+create policy "team delete" on compliance_entries for delete using (true);
+```
+
 ## Updating the item list
 
 New material in the system? Open `materials.js` and add a line inside the big quoted block, in the same format as the others: the code, a tab (`\t`), then the description. Commit and push — the search picks it up immediately. (Unlisted codes can still be logged in the meantime; they're just flagged "not in item list.")

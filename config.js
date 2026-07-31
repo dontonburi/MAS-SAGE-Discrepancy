@@ -14,6 +14,7 @@ window.APP_CONFIG = {
   // Row Level Security policies on the table (see README.md).
   SUPABASE_ANON_KEY: "sb_publishable_GeohBi29H7w_k4TVwVWKTQ_H_5UyTXS",
   TABLE: "usage_entries",
+  COMPLIANCE_TABLE: "compliance_entries",
   // Password required before the CSV export downloads. Change it here;
   // leave it "" to turn the password off. Note: this deters casual clicks,
   // but anyone who reads the page source can find it.

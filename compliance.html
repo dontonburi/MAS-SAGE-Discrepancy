@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Paperwork Compliance — Material Usage Log</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css?v=20260801a" />
+</head>
+<body>
+  <header class="head">
+    <div class="head-inner">
+      <div>
+        <div class="brand">
+          <span class="tick"></span>
+          <h1>Paperwork Compliance</h1>
+        </div>
+        <p class="sub">Log documentation errors by production date, shift, and line — and watch the trend by team.</p>
+      </div>
+      <div class="head-right">
+        <a class="pill pill-link" href="index.html">&larr; Usage log</a>
+        <span class="pill pill-warn" id="statusPill"><span class="dot"></span><span id="statusText">Loading…</span></span>
+        <span class="count" id="entryCount">0 records</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- ================= new record ================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>New compliance record</h2>
+        <div class="card-head-actions">
+          <button class="ghost hidden" id="clearBtn" type="button">Clear</button>
+        </div>
+      </div>
+
+      <div class="quad quad-c">
+        <div class="field">
+          <label class="flabel" for="dateInput">Date of production</label>
+          <input id="dateInput" class="input mono" type="date" />
+        </div>
+        <div class="field">
+          <span class="flabel">Shift</span>
+          <div class="shift-group" id="shiftGroup">
+            <button type="button" class="chip shift" data-shift="1" aria-pressed="false">1</button>
+            <button type="button" class="chip shift" data-shift="2" aria-pressed="false">2</button>
+            <button type="button" class="chip shift" data-shift="3" aria-pressed="false">3</button>
+          </div>
+        </div>
+        <div class="field f-grow2">
+          <label class="flabel" for="typeSel">Type of error</label>
+          <select id="typeSel" class="input"></select>
+          <input id="typeOther" class="input hidden" placeholder="Describe the error type" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="flabel">Lines involved — select all that apply</span>
+        <div class="board" id="board"></div>
+      </div>
+
+      <div class="field">
+        <label class="flabel" for="noteInput">Notes — optional</label>
+        <textarea id="noteInput" class="input" rows="1" placeholder="Batch, document, or anything worth remembering"></textarea>
+      </div>
+
+      <div class="err hidden" id="errBox"></div>
+
+      <div class="actions">
+        <button class="save" id="saveBtn" type="button">Save record</button>
+        <span class="sel-summary">Date, shift, lines, and type stay filled after saving — handy when feeding a batch of records.</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="main wide">
+    <!-- ================= scoreboard ================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Error summary</h2>
+        <div class="card-head-actions">
+          <select id="periodSel" class="input input-slim">
+            <option value="all">All time</option>
+            <option value="90">Last 90 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <button class="ghost accent" id="copySummaryBtn" type="button" disabled>Copy summary</button>
+        </div>
+      </div>
+      <div id="statsArea"></div>
+    </section>
+
+    <!-- ================= records ================= -->
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Compliance records</h2>
+        <div class="card-head-actions">
+          <button class="ghost hidden" id="refreshBtn" type="button">Refresh</button>
+          <button class="ghost" id="exportBtn" type="button" disabled>Export CSV (all 0)</button>
+        </div>
+      </div>
+      <div id="logArea"></div>
+    </section>
+
+    <p class="foot">
+      Records live in the same shared database as the usage log, in their own table. Edit the error-type
+      list at the top of <span class="mono">compliance.js</span>.
+    </p>
+  </div>
+
+  <div class="modal-bg hidden" id="pwModal">
+    <div class="modal">
+      <h3 class="label"><span class="sq"></span>Export protected</h3>
+      <p class="pw-note">Enter the export password to download the CSV.</p>
+      <input type="password" id="pwInput" class="input" placeholder="Password" autocomplete="off" />
+      <div class="pw-err hidden" id="pwErr">Wrong password — try again.</div>
+      <div class="modal-actions">
+        <button class="ghost" id="pwCancel" type="button">Cancel</button>
+        <button class="save save-sm" id="pwOk" type="button">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="config.js?v=20260801a"></script>
+  <script src="compliance.js?v=20260801a"></script>
+</body>
+</html>
