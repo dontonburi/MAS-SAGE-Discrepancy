@@ -459,29 +459,19 @@
       d.setDate(d.getDate() - n);
       return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     };
-    var cut5 = dayCut(5), cut3 = dayCut(3);
-    // Smart default view:
-    //   something open -> only open entries from the last 5 days
-    //                     (if the only open ones are older, show those instead)
-    //   all resolved   -> every record from the last 3 days
+    var cut3 = dayCut(3);
+    // Default view: something open -> every open entry (any age);
+    //               everything resolved -> all records from the last 3 days
     var recentMode = null;
     if (S.fstatus === "recent") {
-      var anyOpen = false, anyOpenFresh = false;
-      S.entries.forEach(function (e) {
-        if (!e.rectified) {
-          anyOpen = true;
-          if (enteredDay(e.ts) >= cut5) anyOpenFresh = true;
-        }
-      });
-      recentMode = !anyOpen ? "all3" : anyOpenFresh ? "open5" : "openAll";
+      recentMode = S.entries.some(function (e) { return !e.rectified; }) ? "open" : "all3";
     }
     return S.entries.filter(function (e) {
       if (S.fstatus === "open" && e.rectified) return false;
       if (S.fstatus === "resolved" && !e.rectified) return false;
       if (S.fstatus === "recent") {
-        if (recentMode === "all3") { if (enteredDay(e.ts) < cut3) return false; }
-        else if (recentMode === "open5") { if (e.rectified || enteredDay(e.ts) < cut5) return false; }
-        else if (e.rectified) return false;
+        if (recentMode === "open" && e.rectified) return false;
+        if (recentMode === "all3" && enteredDay(e.ts) < cut3) return false;
       }
       if (S.fname && (e.by || "") !== S.fname) return false;
       if (S.fdate && e.date !== S.fdate) return false;
@@ -561,14 +551,9 @@
     nf.value = S.fname;
   }
 
-  function syncResetBtn() {
-    var active = S.ftext || S.fdate || S.fname || S.fline || S.fstatus !== "recent";
-    $("resetFilters").classList.toggle("hidden", !active);
-  }
 
   function renderLog() {
     syncNameFilter();
-    syncResetBtn();
     var area = $("logArea");
     var vis = visibleEntries();
     var n = S.entries.length;
@@ -581,7 +566,7 @@
       area.innerHTML = '<div class="empty">' + (n === 0
         ? "No usage logged yet. Fill out the ticket above — or press <strong>Load example</strong> to see how one is filled."
         : allClear
-          ? "All caught up — everything is resolved and nothing new in the last 3 days. Set Status to \u201CEverything\u201D to browse the history."
+          ? "All caught up — everything is resolved and nothing new in the last 3 days. Use the \u201CResolved only\u201D filter to browse older records."
           : "No entries match these filters.") + "</div>";
       updateCopyLabel(vis);
       return;
@@ -961,15 +946,6 @@
     $("lineFilter").addEventListener("change", function () { S.fline = this.value; renderLog(); });
     $("statusFilter").addEventListener("change", function () { S.fstatus = this.value; renderLog(); });
     $("nameFilter").addEventListener("change", function () { S.fname = this.value; renderLog(); });
-    $("resetFilters").addEventListener("click", function () {
-      S.ftext = ""; S.fdate = ""; S.fname = ""; S.fline = ""; S.fstatus = "recent";
-      $("searchInput").value = "";
-      $("dateFilter").value = "";
-      $("nameFilter").value = "";
-      $("lineFilter").value = "";
-      $("statusFilter").value = "recent";
-      renderLog();
-    });
     $("dateFilter").addEventListener("input", function () { S.fdate = this.value; renderLog(); });
     $("dateFilter").addEventListener("change", function () { S.fdate = this.value; renderLog(); });
 

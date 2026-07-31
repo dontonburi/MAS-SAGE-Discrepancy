@@ -109,7 +109,7 @@ New material in the system? Open `materials.js` and add a line inside the big qu
 
 ## Filters, prices, and the export password
 
-The log filters by search, production date, status, name, and line. The default status view ("Open + recent") is smart: while anything is open it shows only open entries from the last 5 days (if the only open items are older, it shows those instead, so nothing unresolved can hide); once everything is resolved it shows all records from the last 3 days. "Everything" shows the full history on screen. Item unit costs can be stored as a hidden third column in `materials.js` (`CODE<TAB>DESC<TAB>PRICE`) — they never appear on screen or in Copy table; only the CSV export includes them, as **Unit $** and **$ Total** columns.
+The log filters by search, production date, status, name, and line. The default status view ("Open + rectified") shows every open entry while anything is open; once everything is resolved it shows all records from the last 3 days. "Open only" and "Resolved only" each show the complete history for that status, and the CSV export always contains everything. Item unit costs can be stored as a hidden third column in `materials.js` (`CODE<TAB>DESC<TAB>PRICE`) — they never appear on screen or in Copy table; only the CSV export includes them, as **Unit $** and **$ Total** columns.
 
 **Export CSV always contains the complete history** — every entry ever logged, ignoring the on-screen filters — and asks for a password before downloading. The password lives in `config.js` (`EXPORT_PASSWORD`; blank turns it off). It deters casual clicks, but anyone reading the page source can find it. Copy table follows the current view/selection and is not password-gated.
 
