@@ -107,6 +107,12 @@ Notes on that setup:
 
 New material in the system? Open `materials.js` and add a line inside the big quoted block, in the same format as the others: the code, a tab (`\t`), then the description. Commit and push — the search picks it up immediately. (Unlisted codes can still be logged in the meantime; they're just flagged "not in item list.")
 
+## Filters, prices, and the export password
+
+The log filters by search, production date, status, name, and line. The default status view ("Open + recent") hides resolved entries entered more than 5 days ago; "Everything" shows the full history on screen. Item unit costs can be stored as a hidden third column in `materials.js` (`CODE<TAB>DESC<TAB>PRICE`) — they never appear on screen or in Copy table; only the CSV export includes them, as **Unit $** and **$ Total** columns.
+
+**Export CSV always contains the complete history** — every entry ever logged, ignoring the on-screen filters — and asks for a password before downloading. The password lives in `config.js` (`EXPORT_PASSWORD`; blank turns it off). It deters casual clicks, but anyone reading the page source can find it. Copy table follows the current view/selection and is not password-gated.
+
 ## Production lines covered
 
 Aerosol A–D · Pops A–E · Rainbow (Drinks) · Gallon · 2.5 Gallon · Processing A–D · Pops Processing · Drinks Processing.

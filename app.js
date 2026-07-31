@@ -448,6 +448,15 @@
   }
 
   /* ---------------- log ---------------- */
+  function entryOrder(a, b) {
+    var da = enteredDay(a.ts), db = enteredDay(b.ts);
+    if (da < db) return 1;
+    if (da > db) return -1;
+    if (a.date < b.date) return 1;
+    if (a.date > b.date) return -1;
+    return (b.ts || 0) - (a.ts || 0);
+  }
+
   function visibleEntries() {
     var q = S.ftext.trim().toUpperCase();
     var cut = cutoffDay();
@@ -460,14 +469,7 @@
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
       if (q && (e.code + " " + e.desc + " " + (e.lot || "") + " " + (e.po || "") + " " + (e.by || "") + " " + (e.note || "")).toUpperCase().indexOf(q) === -1) return false;
       return true;
-    }).sort(function (a, b) {
-      var da = enteredDay(a.ts), db = enteredDay(b.ts);
-      if (da < db) return 1;
-      if (da > db) return -1;
-      if (a.date < b.date) return 1;
-      if (a.date > b.date) return -1;
-      return (b.ts || 0) - (a.ts || 0);
-    });
+    }).sort(entryOrder);
   }
 
   function refreshNameFilter() {
@@ -552,8 +554,8 @@
     var vis = visibleEntries();
     var n = S.entries.length;
     $("entryCount").textContent = n + (n === 1 ? " entry" : " entries");
-    $("exportBtn").textContent = "Export CSV (" + vis.length + ")";
-    $("exportBtn").disabled = vis.length === 0;
+    $("exportBtn").textContent = "Export CSV (all " + n + ")";
+    $("exportBtn").disabled = n === 0;
 
     if (vis.length === 0) {
       area.innerHTML = '<div class="empty">' + (n === 0
@@ -754,11 +756,9 @@
     var vis = chosen.length ? chosen : pool;
     if (!vis.length) return;
     var clean = function (c) { return String(c == null ? "" : c).replace(/[\t\n\r]+/g, " "); };
-    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "$ Total", "Note", "Name", "Date entered"];
+    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Date entered"];
     var data = vis.map(function (e) {
-      var up = priceOf(e.code);
-      var tot = up != null ? money(up * Number(e.qty)) : "";
-      return [e.date, e.code, e.lot || (e.po ? "PO " + e.po : ""), e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), tot, e.note || "", e.by || "", fmtDate(enteredDay(e.ts))];
+      return [e.date, e.code, e.lot || (e.po ? "PO " + e.po : ""), e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), e.note || "", e.by || "", fmtDate(enteredDay(e.ts))];
     });
     var daysIn = {};
     vis.forEach(function (e) { daysIn[enteredDay(e.ts)] = true; });
@@ -835,7 +835,7 @@
   }
 
   function doExportCsv() {
-    var vis = visibleEntries();
+    var vis = S.entries.slice().sort(entryOrder); // full history — filters don't apply
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
     var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "PO", "Description", "Line", "Shift", "Qtty missing", "Unit $", "$ Total", "Note", "Name", "Date entered", "Rectified", "Logged at"]];
     vis.forEach(function (e) {
