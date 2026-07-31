@@ -1,4 +1,5 @@
-// Material master list — one item per line, TAB between code and description.
+// Material master list — one item per line: CODE <tab> DESCRIPTION <tab> UNIT PRICE (optional).
+// The price never shows in the app itself — only in Copy table / CSV exports.
 // To add a new material: add a line inside the quoted block below in the same
 // format, e.g.  12345\tIN-A-NEW MATERIAL NAME
 // (\t is a tab character in the string — copy an existing line and edit it.)

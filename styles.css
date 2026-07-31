@@ -179,7 +179,11 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
 }
 
 /* log */
-.filters { display: grid; grid-template-columns: 1fr 170px 220px; gap: 10px; margin-bottom: 14px; }
+.filters { display: grid; grid-template-columns: 1fr 150px 165px 150px 200px; gap: 10px; margin-bottom: 14px; }
+@media (max-width: 980px) {
+  .filters { grid-template-columns: 1fr 1fr; }
+  .filters #searchInput { grid-column: 1 / -1; }
+}
 @media (max-width: 560px) { .filters { grid-template-columns: 1fr; } }
 /* usage log table */
 .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
@@ -232,6 +236,20 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
   text-align: center; color: var(--muted); font-size: 14px;
 }
 .foot { font-size: 12.5px; color: var(--muted); text-align: center; }
+
+/* export password modal */
+.modal-bg {
+  position: fixed; inset: 0; background: rgba(23, 36, 46, 0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px;
+}
+.modal {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 18px; width: 100%; max-width: 380px;
+}
+.pw-note { font-size: 13.5px; color: var(--muted); margin: 8px 0 10px; }
+.pw-err { margin-top: 8px; font-size: 13px; color: var(--danger); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.save-sm { padding: 8px 18px; font-size: 14px; }
 
 /* toast */
 .toast {

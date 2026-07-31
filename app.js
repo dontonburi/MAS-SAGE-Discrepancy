@@ -1,13 +1,19 @@
 "use strict";
 (function () {
   /* ---------------- data ---------------- */
-  var MATERIALS = (window.MATERIALS_TSV || "")
-    .split("\n")
-    .filter(function (l) { return l.indexOf("\t") > 0; })
-    .map(function (l) {
-      var i = l.indexOf("\t");
-      return { c: l.slice(0, i), d: l.slice(i + 1) };
-    });
+  var MATERIALS = [];
+  var PRICE = {}; // item unit costs — never rendered in the UI, exports only
+  (window.MATERIALS_TSV || "").split("\n").forEach(function (l) {
+    var f = l.split("\t");
+    if (f.length < 2 || !f[0]) return;
+    MATERIALS.push({ c: f[0], d: f[1] || "" });
+    if (f.length > 2) {
+      var pv = parseFloat(String(f[2]).replace(/[^0-9.\-]/g, ""));
+      if (isFinite(pv)) PRICE[f[0]] = pv;
+    }
+  });
+  function priceOf(code) { return Object.prototype.hasOwnProperty.call(PRICE, code) ? PRICE[code] : null; }
+  function money(n) { return Number(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
   var LINE_GROUPS = [
     { g: "Aerosol", items: [["Aerosol A", "A"], ["Aerosol B", "B"], ["Aerosol C", "C"], ["Aerosol D", "D"]] },
@@ -42,6 +48,11 @@
   function yesterdayStr() {
     var d = new Date();
     d.setDate(d.getDate() - 1);
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+  }
+  function cutoffDay() {
+    var d = new Date();
+    d.setDate(d.getDate() - 5);
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
   }
   function enteredDay(ts) {
@@ -163,7 +174,7 @@
   var S = {
     entries: [], sel: null, linesSel: [], shifts: [], copySel: {}, shown: [], hi: 0,
     confirmId: null, confirmTimer: null, toastTimer: null, saving: false, editNoteId: null,
-    ftext: "", fline: "", fdate: "",
+    ftext: "", fline: "", fdate: "", fstatus: "recent", fname: "", fstatus: "", fname: "",
   };
 
   /* ---------------- init ---------------- */
@@ -194,6 +205,7 @@
     store.load().then(function (list) {
       S.entries = list;
       setStatus(store.shared ? "ok" : "local");
+      refreshNameFilter();
       renderLog();
     }).catch(function () {
       setStatus("err");
@@ -396,6 +408,7 @@
     $("saveBtn").textContent = "Saving…";
     store.save(entry).then(function (saved) {
       S.entries.push(saved);
+      refreshNameFilter();
       clearPick();
       $("matInput").value = "";
       $("lotInput").value = "";
@@ -437,7 +450,12 @@
   /* ---------------- log ---------------- */
   function visibleEntries() {
     var q = S.ftext.trim().toUpperCase();
+    var cut = cutoffDay();
     return S.entries.filter(function (e) {
+      if (S.fstatus === "open" && e.rectified) return false;
+      if (S.fstatus === "resolved" && !e.rectified) return false;
+      if (S.fstatus === "" && e.rectified && enteredDay(e.ts) < cut) return false;
+      if (S.fname && (e.by || "") !== S.fname) return false;
       if (S.fdate && e.date !== S.fdate) return false;
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
       if (q && (e.code + " " + e.desc + " " + (e.lot || "") + " " + (e.po || "") + " " + (e.by || "") + " " + (e.note || "")).toUpperCase().indexOf(q) === -1) return false;
@@ -450,6 +468,19 @@
       if (a.date > b.date) return -1;
       return (b.ts || 0) - (a.ts || 0);
     });
+  }
+
+  function refreshNameFilter() {
+    var sel = $("nameFilter");
+    var have = {};
+    TEAM.forEach(function (n) { have[n] = 1; });
+    S.entries.forEach(function (e) { if (e.by) have[e.by] = 1; });
+    var names = Object.keys(have).sort();
+    var cur = S.fname;
+    sel.innerHTML = '<option value="">All names</option>' +
+      names.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + "</option>"; }).join("");
+    if (cur && names.indexOf(cur) !== -1) sel.value = cur;
+    else { sel.value = ""; S.fname = ""; }
   }
 
   function updateCopyLabel(vis) {
@@ -495,7 +526,22 @@
     updateCopyLabel(vis);
   }
 
+  function syncNameFilter() {
+    var nf = $("nameFilter");
+    var names = {};
+    S.entries.forEach(function (e) { if (e.by) names[e.by] = 1; });
+    var list = Object.keys(names).sort();
+    var sig = list.join("|");
+    if (nf.getAttribute("data-sig") === sig) return;
+    if (S.fname && list.indexOf(S.fname) === -1) S.fname = "";
+    nf.innerHTML = '<option value="">All names</option>' +
+      list.map(function (n) { return '<option value="' + esc(n) + '">' + esc(n) + "</option>"; }).join("");
+    nf.setAttribute("data-sig", sig);
+    nf.value = S.fname;
+  }
+
   function renderLog() {
+    syncNameFilter();
     var area = $("logArea");
     var vis = visibleEntries();
     var n = S.entries.length;
@@ -702,9 +748,11 @@
     var vis = chosen.length ? chosen : pool;
     if (!vis.length) return;
     var clean = function (c) { return String(c == null ? "" : c).replace(/[\t\n\r]+/g, " "); };
-    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Date entered"];
+    var head = ["Batch/Production date", "Item (MAS)", "Lot code", "Description", "Line", "Shift", "Qtty missing", "$ Total", "Note", "Name", "Date entered"];
     var data = vis.map(function (e) {
-      return [e.date, e.code, e.lot || (e.po ? "PO " + e.po : ""), e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), e.note || "", e.by || "", fmtDate(enteredDay(e.ts))];
+      var up = priceOf(e.code);
+      var tot = up != null ? money(up * Number(e.qty)) : "";
+      return [e.date, e.code, e.lot || (e.po ? "PO " + e.po : ""), e.desc, (e.lines || []).join(", "), (e.shifts || []).join(", "), fmtQty(e.qty), tot, e.note || "", e.by || "", fmtDate(enteredDay(e.ts))];
     });
     var daysIn = {};
     vis.forEach(function (e) { daysIn[enteredDay(e.ts)] = true; });
@@ -752,6 +800,7 @@
     store.load().then(function (list) {
       S.entries = list;
       setStatus("ok");
+      refreshNameFilter();
       renderLog();
       toast("Log refreshed");
     }).catch(function () {
@@ -760,12 +809,34 @@
     });
   }
 
-  function exportCsv() {
+  function requestExport() {
+    if (!cfg.EXPORT_PASSWORD) { doExportCsv(); return; }
+    $("pwInput").value = "";
+    $("pwErr").classList.add("hidden");
+    $("pwModal").classList.remove("hidden");
+    setTimeout(function () { $("pwInput").focus(); }, 50);
+  }
+  function closePw() { $("pwModal").classList.add("hidden"); }
+  function tryPw() {
+    if ($("pwInput").value === cfg.EXPORT_PASSWORD) {
+      closePw();
+      doExportCsv();
+    } else {
+      $("pwErr").classList.remove("hidden");
+      $("pwInput").value = "";
+      $("pwInput").focus();
+    }
+  }
+
+  function doExportCsv() {
     var vis = visibleEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "PO", "Description", "Line", "Shift", "Qtty missing", "Note", "Name", "Date entered", "Rectified", "Logged at"]];
+    var rows = [["Batch/Production date", "Item (MAS)", "Lot code", "PO", "Description", "Line", "Shift", "Qtty missing", "Unit $", "$ Total", "Note", "Name", "Date entered", "Rectified", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.code, e.lot || "", e.po || "", e.desc, (e.lines || []).join("; "), (e.shifts || []).join(", "), e.qty, e.note || "", e.by || "", enteredDay(e.ts), e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
+      var up = priceOf(e.code);
+      rows.push([e.date, e.code, e.lot || "", e.po || "", e.desc, (e.lines || []).join("; "), (e.shifts || []).join(", "), e.qty,
+        up != null ? up.toFixed(2) : "", up != null ? (up * Number(e.qty)).toFixed(2) : "",
+        e.note || "", e.by || "", enteredDay(e.ts), e.rectified ? "Yes" : "", new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -774,6 +845,7 @@
     a.download = "material-usage-log_" + todayStr() + ".csv";
     a.click();
     URL.revokeObjectURL(a.href);
+    toast("CSV exported");
   }
 
   /* ---------------- events ---------------- */
@@ -842,12 +914,25 @@
     $("clearBtn").addEventListener("click", clearForm);
     $("exampleBtn").addEventListener("click", loadExample);
     $("refreshBtn").addEventListener("click", refresh);
+    $("selectAllBtn").addEventListener("click", function () {
+      visibleEntries().forEach(function (en) { if (!en.rectified) S.copySel[en.id] = true; });
+      renderLog();
+    });
     $("clearSelBtn").addEventListener("click", function () { S.copySel = {}; renderLog(); });
     $("copyTableBtn").addEventListener("click", copyTable);
-    $("exportBtn").addEventListener("click", exportCsv);
+    $("exportBtn").addEventListener("click", requestExport);
+    $("pwOk").addEventListener("click", tryPw);
+    $("pwCancel").addEventListener("click", closePw);
+    $("pwModal").addEventListener("click", function (e) { if (e.target === this) closePw(); });
+    $("pwInput").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") tryPw();
+      if (e.key === "Escape") closePw();
+    });
 
     $("searchInput").addEventListener("input", function () { S.ftext = this.value; renderLog(); });
     $("lineFilter").addEventListener("change", function () { S.fline = this.value; renderLog(); });
+    $("statusFilter").addEventListener("change", function () { S.fstatus = this.value; renderLog(); });
+    $("nameFilter").addEventListener("change", function () { S.fname = this.value; renderLog(); });
     $("dateFilter").addEventListener("input", function () { S.fdate = this.value; renderLog(); });
     $("dateFilter").addEventListener("change", function () { S.fdate = this.value; renderLog(); });
 
