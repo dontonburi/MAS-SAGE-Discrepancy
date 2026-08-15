@@ -105,7 +105,7 @@ Notes on that setup:
 
 ## Paperwork compliance page
 
-`compliance.html` is a second page for logging documentation errors — date of production, shift (one per record, so blame lands cleanly), lines involved, and type of error (editable list at the top of `compliance.js`, plus an "Other" option). The scoreboard above the records shows totals by shift, by error type, and by line, plus a week-by-week matrix per shift so improvement is visible over time; **Copy summary** puts that matrix on the clipboard as a paste-ready table. CSV export (full history) uses the same password as the usage log. Records live in their own table — run this once in the Supabase SQL Editor:
+`compliance.html` is a second page for logging documentation errors — date of production, shift (one per record, so blame lands cleanly), lines involved, and type of error (editable list at the top of `compliance.js`, plus an "Other" option). The scoreboard above the records shows totals by shift, by error type, and by line, plus a week-by-week matrix per shift so improvement is visible over time; **Copy summary** puts that matrix on the clipboard as a paste-ready table. CSV export (full history) uses the same password as the usage log. **Drag an email onto the entry form** (.eml — new Outlook / Outlook web: &#8943; &rarr; Download) and it auto-fills the date, shift, lines, and error type from the message, keeps the subject as the note, and stages any attached images; they upload to a Supabase Storage bucket on save. Dropping image files directly also works. Click any record row to see the full email details and images. A ready-made `sample-error-email.eml` is in the repo for testing the flow. Records live in their own table — run this once in the Supabase SQL Editor:
 
 ```sql
 create table if not exists compliance_entries (
@@ -127,6 +127,44 @@ drop policy if exists "team delete" on compliance_entries;
 create policy "team read"   on compliance_entries for select using (true);
 create policy "team insert" on compliance_entries for insert with check (true);
 create policy "team delete" on compliance_entries for delete using (true);
+
+alter table compliance_entries
+  add column if not exists attachments jsonb,
+  add column if not exists detail text;
+
+insert into storage.buckets (id, name, public)
+values ('compliance', 'compliance', true)
+on conflict (id) do nothing;
+
+drop policy if exists "compliance read"   on storage.objects;
+drop policy if exists "compliance upload" on storage.objects;
+create policy "compliance read"   on storage.objects for select using (bucket_id = 'compliance');
+create policy "compliance upload" on storage.objects for insert with check (bucket_id = 'compliance');
+```
+
+## Drop an email onto the compliance form
+
+Drag a saved email file onto the dashed box on the compliance page and it reads the message, prefills date of production, shift, lines, and error type from the subject/body, puts the subject in the note, and stages the attached images (tiny signature logos are ignored). Review, adjust, Save. Clicking any record (or its **View** button) opens the details: the email's sender, subject, and body, plus the attached photos.
+
+Getting the file out of Outlook: the desktop app won't hand a file to the browser directly — **drag the email to your Desktop first** (that creates a `.msg` file), then drag that file into the page. "Save As" works too. Outlook on the web downloads `.eml`, which also works, and you can drop plain images or PDFs to attach them without an email. `sample-error-email.eml` in this repo is a working example to try.
+
+Attachments upload to a **public** Supabase Storage bucket — anyone with a file's link can open it, so treat it like the rest of this app: fine for the floor, not for secrets. In device-only mode, files are kept inside the browser and capped at 400 KB each. Run this once in the SQL Editor to add the columns and the bucket:
+
+```sql
+alter table compliance_entries
+  add column if not exists details jsonb,
+  add column if not exists files jsonb;
+
+insert into storage.buckets (id, name, public) values ('compliance-files','compliance-files', true)
+on conflict (id) do nothing;
+
+drop policy if exists "compliance files read"   on storage.objects;
+drop policy if exists "compliance files insert" on storage.objects;
+drop policy if exists "compliance files delete" on storage.objects;
+
+create policy "compliance files read"   on storage.objects for select using (bucket_id = 'compliance-files');
+create policy "compliance files insert" on storage.objects for insert with check (bucket_id = 'compliance-files');
+create policy "compliance files delete" on storage.objects for delete using (bucket_id = 'compliance-files');
 ```
 
 ## Updating the item list

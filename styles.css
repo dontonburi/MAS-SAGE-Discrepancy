@@ -264,6 +264,42 @@ th.mx-n { text-align: right; }
 .mx-bar { width: 34%; }
 .mx-bar span { display: block; height: 10px; background: var(--amber); border-radius: 3px; min-width: 2px; }
 
+/* email drop + record details */
+.drop-hint {
+  border: 1.5px dashed var(--line); border-radius: 8px; background: #fff;
+  padding: 9px 12px; font-size: 13px; color: var(--muted); margin-bottom: 14px;
+}
+#dropCard.dragging { outline: 2px dashed var(--amber); outline-offset: 4px; }
+#dropCard.dragging .drop-hint { border-color: var(--amber); background: var(--amber-soft); color: #5a4300; }
+.staged {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  background: var(--amber-soft); border: 1px solid #efd79a; border-radius: 7px;
+  padding: 8px 12px; font-size: 13px;
+}
+.staged span { flex: 1; }
+.modal-lg { max-width: 720px; max-height: 84vh; overflow-y: auto; }
+.d-grid { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 10px 0 4px; font-size: 14px; }
+.d-k {
+  display: block; color: var(--muted); font-family: "Barlow Condensed";
+  font-weight: 600; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase;
+}
+.d-grid b { font-family: "IBM Plex Mono"; font-weight: 600; }
+.detail-pre {
+  white-space: pre-wrap; background: #f7f8f4; border: 1px solid var(--line);
+  border-radius: 7px; padding: 10px 12px; font: 13px/1.5 "Barlow", sans-serif;
+  max-height: 260px; overflow: auto; margin: 10px 0;
+}
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.thumbs img {
+  width: 120px; height: 120px; object-fit: cover; background: #fff;
+  border: 1px solid var(--line); border-radius: 7px;
+}
+.att-file {
+  display: inline-block; border: 1px solid var(--line); border-radius: 6px;
+  padding: 5px 10px; font-size: 13px; text-decoration: none; color: #22384b; background: #fff;
+}
+.c-att { white-space: nowrap; }
+
 /* export password modal */
 .modal-bg {
   position: fixed; inset: 0; background: rgba(23, 36, 46, 0.45);
@@ -286,3 +322,37 @@ th.mx-n { text-align: right; }
 }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* email intake + record details */
+.dropzone {
+  border: 2px dashed var(--line); border-radius: 8px; background: #fff;
+  padding: 13px 15px; font-size: 13.5px; color: #3b4a55; cursor: pointer;
+  margin-bottom: 15px; transition: border-color 0.12s, background 0.12s;
+}
+.dropzone.drag { border-color: var(--amber); background: var(--amber-soft); }
+.dz-browse { color: #7a5400; text-decoration: underline; }
+.staged { display: flex; flex-wrap: wrap; gap: 7px; margin: -6px 0 15px; }
+.sfile {
+  display: inline-flex; align-items: center; gap: 7px; max-width: 260px;
+  border: 1px solid var(--line); background: #fbfbf8; border-radius: 6px;
+  padding: 4px 8px; font-size: 12.5px;
+}
+.sfile img { width: 26px; height: 26px; object-fit: cover; border-radius: 4px; }
+.sfile .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sfile .sx { border: none; background: none; cursor: pointer; color: var(--danger); font-size: 14px; padding: 0 2px; }
+.badge-clip {
+  font-family: "IBM Plex Mono"; font-size: 11px; color: #7a5400;
+  background: var(--amber-soft); border: 1px solid #efd79a; border-radius: 4px;
+  padding: 1px 5px; margin-left: 6px; white-space: nowrap;
+}
+.modal-wide { max-width: 680px; }
+.dm-grid { display: grid; grid-template-columns: 130px 1fr; gap: 5px 12px; font-size: 14px; margin-bottom: 12px; }
+.dm-k { color: var(--muted); font-family: "Barlow Condensed"; font-weight: 600; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.dm-body {
+  white-space: pre-wrap; background: #f7f8f4; border: 1px solid var(--line); border-radius: 7px;
+  padding: 10px 12px; font-size: 13px; max-height: 220px; overflow-y: auto; margin-bottom: 12px;
+}
+.dm-imgs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.dm-imgs a { display: block; }
+.dm-imgs img { width: 110px; height: 110px; object-fit: cover; border-radius: 7px; border: 1px solid var(--line); }
+.dm-files { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; }

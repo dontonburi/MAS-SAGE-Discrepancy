@@ -20,10 +20,15 @@
       ],
     },
   ];
+  /* Plant shorthand -> line-board names. Add your own, e.g. "a line": "Aerosol A". */
+  var LINE_ALIASES = {
+    // "a line": "Aerosol A",
+  };
+
   var ALL_LINES = [];
   LINE_GROUPS.forEach(function (g) { g.items.forEach(function (it) { ALL_LINES.push(it[0]); }); });
 
-  /* ---------------- helpers ---------------- */
+  /* ---------------- generic helpers ---------------- */
   function esc(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -34,10 +39,10 @@
   function yesterdayStr() { var d = new Date(); d.setDate(d.getDate() - 1); return dstr(d); }
   function fmtDate(s) {
     var p = (s || "").split("-").map(Number);
-    if (!p[0] || !p[1] || !p[2]) return s || "—";
+    if (!p[0] || !p[1] || !p[2]) return s || "\u2014";
     return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
-  function weekKey(s) { // Monday of the production week
+  function weekKey(s) {
     var p = (s || "").split("-").map(Number);
     var d = new Date(p[0], p[1] - 1, p[2]);
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
@@ -47,15 +52,174 @@
   function $(id) { return document.getElementById(id); }
   function safeParse(v) { try { var x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch (e) { return []; } }
 
+  /* ---------------- email + file intake ---------------- */
+  function b64ToBytes(b64) {
+    var bin = atob(String(b64).replace(/[^A-Za-z0-9+/=]/g, ""));
+    var u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  }
+  function bytesToB64(u8) {
+    var s = "";
+    for (var i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function decodeBytes(u8, cs) {
+    try { return new TextDecoder((cs || "utf-8").toLowerCase()).decode(u8); }
+    catch (e) { return new TextDecoder("utf-8").decode(u8); }
+  }
+  function qpToBytes(s) {
+    var out = [];
+    s = s.replace(/=\r?\n/g, "");
+    for (var i = 0; i < s.length; i++) {
+      if (s[i] === "=" && /^[0-9A-Fa-f]{2}/.test(s.substr(i + 1, 2))) {
+        out.push(parseInt(s.substr(i + 1, 2), 16));
+        i += 2;
+      } else out.push(s.charCodeAt(i) & 0xff);
+    }
+    return new Uint8Array(out);
+  }
+  function rfc2047(s) {
+    return String(s || "").replace(/=\?([^?]+)\?([bBqQ])\?([^?]*)\?=/g, function (_, cs, enc, txt) {
+      try {
+        if (enc.toUpperCase() === "B") return decodeBytes(b64ToBytes(txt), cs);
+        return decodeBytes(qpToBytes(txt.replace(/_/g, " ")), cs);
+      } catch (e) { return txt; }
+    });
+  }
+  function stripHtml(html) {
+    return String(html || "")
+      .replace(/<(style|script)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|tr|li)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function guessMime(name) {
+    var m = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf" };
+    var ext = (name || "").split(".").pop().toLowerCase();
+    return m[ext] || "application/octet-stream";
+  }
+
+  function parseEml(raw) {
+    function splitHead(txt) {
+      var m = txt.match(/\r?\n\r?\n/);
+      if (!m) return [txt, ""];
+      return [txt.slice(0, m.index), txt.slice(m.index + m[0].length)];
+    }
+    function headers(block) {
+      var lines = block.split(/\r?\n/), out = {}, cur = null;
+      lines.forEach(function (l) {
+        if (/^[ \t]/.test(l) && cur) out[cur] += " " + l.trim();
+        else {
+          var i = l.indexOf(":");
+          if (i > 0) { cur = l.slice(0, i).toLowerCase(); out[cur] = (out[cur] ? out[cur] + ", " : "") + l.slice(i + 1).trim(); }
+        }
+      });
+      return out;
+    }
+    function param(v, name) {
+      var m = String(v || "").match(new RegExp(name + '\\s*=\\s*("([^"]*)"|[^;\\s]+)', "i"));
+      return m ? (m[2] != null ? m[2] : m[1]) : "";
+    }
+    var out = { subject: "", from: "", sentDate: null, text: "", html: "", attachments: [] };
+
+    function walk(headBlock, body) {
+      var h = headers(headBlock);
+      var ct = h["content-type"] || "text/plain";
+      var mime = ct.split(";")[0].trim().toLowerCase();
+      if (mime.indexOf("multipart/") === 0) {
+        var b = param(ct, "boundary");
+        if (!b) return;
+        var bpat = b.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        var parts = body.split(new RegExp("\\r?\\n?--" + bpat + "(?:--)?\\r?\\n?"));
+        parts.slice(1).forEach(function (p) {
+          if (!p.trim()) return;
+          var sp = splitHead(p);
+          walk(sp[0], sp[1]);
+        });
+        return;
+      }
+      var cte = (h["content-transfer-encoding"] || "").toLowerCase();
+      var bytes;
+      if (cte.indexOf("base64") !== -1) bytes = b64ToBytes(body);
+      else if (cte.indexOf("quoted-printable") !== -1) bytes = qpToBytes(body);
+      else {
+        bytes = new Uint8Array(body.length);
+        for (var i = 0; i < body.length; i++) bytes[i] = body.charCodeAt(i) & 0xff;
+      }
+      var disp = h["content-disposition"] || "";
+      var fname = rfc2047(param(disp, "filename") || param(ct, "name"));
+      var isAtt = /attachment/i.test(disp) || (!!fname && !/^text\//.test(mime));
+      if (isAtt || (/^image\//.test(mime) && fname)) {
+        out.attachments.push({ name: fname || "attachment", bytes: bytes, mime: mime });
+      } else if (mime === "text/plain" && !out.text) {
+        out.text = decodeBytes(bytes, param(ct, "charset"));
+      } else if (mime === "text/html" && !out.html) {
+        out.html = decodeBytes(bytes, param(ct, "charset"));
+      }
+    }
+    var sp = splitHead(raw);
+    var top = headers(sp[0]);
+    out.subject = rfc2047(top.subject || "");
+    out.from = rfc2047(top.from || "");
+    var d = new Date(top.date || "");
+    out.sentDate = isFinite(d.getTime()) ? d : null;
+    walk(sp[0], sp[1]);
+    out.body = out.text || stripHtml(out.html);
+    return out;
+  }
+
+  var MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+  function detect(text, sentDate) {
+    // Quoted thread headers ("From:", "Sent: Monday, August 10...") are full of
+    // dates and names that aren't about the incident — scrub those lines first.
+    var t = String(text || "").replace(/^[ >]*(from|sent|to|cc|subject|date)\s*:.*$/gim, " ");
+    var out = { shift: null, lines: [], date: "", type: "" };
+    var m = t.match(/shift\s*#?\s*([1-3])\b/i) || t.match(/\b([1-3])(?:st|nd|rd)\s+shift\b/i);
+    if (m) out.shift = Number(m[1]);
+    ALL_LINES.forEach(function (l) {
+      var pat = l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp("\\b" + pat, "i").test(t)) out.lines.push(l);
+      else if (l === "Rainbow (Drinks)" && /\brainbow\b/i.test(t)) out.lines.push(l);
+    });
+    Object.keys(LINE_ALIASES).forEach(function (alias) {
+      var canon = LINE_ALIASES[alias];
+      if (ALL_LINES.indexOf(canon) === -1 || out.lines.indexOf(canon) !== -1) return;
+      var pat = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp("\\b" + pat + "\\b", "i").test(t)) out.lines.push(canon);
+    });
+    var d1 = t.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+    var d2 = t.match(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/);
+    var d3 = t.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:,?\s*(20\d{2}))?/i);
+    if (d1) out.date = d1[1] + "-" + pad(d1[2]) + "-" + pad(d1[3]);
+    else if (d2) out.date = d2[3] + "-" + pad(d2[1]) + "-" + pad(d2[2]);
+    else if (d3) out.date = (d3[3] || new Date().getFullYear()) + "-" + pad(MONTHS[d3[1].toLowerCase()]) + "-" + pad(d3[2]);
+    else if (sentDate && /\byesterday\b/i.test(t)) {
+      var yd = new Date(sentDate.getTime());
+      yd.setDate(yd.getDate() - 1);
+      out.date = dstr(yd);
+    } else if (sentDate && /\b(today|this morning)\b/i.test(t)) {
+      out.date = dstr(sentDate);
+    }
+    if (/proof|paperwork/i.test(t)) out.type = "Missing material usage proofs";
+    else if (/\bfg\b|finished good/i.test(t)) out.type = "FG reporting error (quantities/lot)";
+    else if (/\blot\b/i.test(t)) out.type = "Material/ingredient lot code reporting error";
+    return out;
+  }
+
   /* ---------------- storage ---------------- */
-  var cfg = window.APP_CONFIG || {};
+  var cfg = (typeof window !== "undefined" && window.APP_CONFIG) || {};
   var SHARED = !!(cfg.SUPABASE_URL && cfg.SUPABASE_ANON_KEY);
   var TABLE = cfg.COMPLIANCE_TABLE || "compliance_entries";
+  var BUCKET = cfg.COMPLIANCE_BUCKET || "compliance-files";
   var LS_KEY = "compliance-entries";
 
   var store;
   if (SHARED) {
-    var BASE = cfg.SUPABASE_URL.replace(/\/+$/, "") + "/rest/v1/" + TABLE;
+    var SB = cfg.SUPABASE_URL.replace(/\/+$/, "");
+    var BASE = SB + "/rest/v1/" + TABLE;
     var HEADERS = {
       apikey: cfg.SUPABASE_ANON_KEY,
       Authorization: "Bearer " + cfg.SUPABASE_ANON_KEY,
@@ -65,6 +229,7 @@
       return {
         id: r.id, date: r.prod_date, shift: Number(r.shift),
         lines: r.lines || [], type: r.error_type || "", note: r.note || "",
+        details: r.details || null, files: r.files || [],
         ts: Date.parse(r.created_at) || Date.now(),
       };
     };
@@ -75,8 +240,35 @@
           .then(function (r) { if (!r.ok) throw new Error("load " + r.status); return r.json(); })
           .then(function (rows) { return rows.map(norm); });
       },
+      uploadFile: function (path, mime, bytes) {
+        return fetch(SB + "/storage/v1/object/" + BUCKET + "/" + path, {
+          method: "POST",
+          headers: {
+            apikey: cfg.SUPABASE_ANON_KEY,
+            Authorization: "Bearer " + cfg.SUPABASE_ANON_KEY,
+            "Content-Type": mime || "application/octet-stream",
+          },
+          body: bytes,
+        }).then(function (r) {
+          if (!r.ok) {
+            return r.json().catch(function () { return {}; }).then(function (j) {
+              throw new Error(j.message || ("upload HTTP " + r.status));
+            });
+          }
+          return SB + "/storage/v1/object/public/" + BUCKET + "/" + path;
+        });
+      },
+      deleteFile: function (path) {
+        return fetch(SB + "/storage/v1/object/" + BUCKET + "/" + path, {
+          method: "DELETE",
+          headers: { apikey: cfg.SUPABASE_ANON_KEY, Authorization: "Bearer " + cfg.SUPABASE_ANON_KEY },
+        }).catch(function () {});
+      },
       save: function (e) {
-        var body = JSON.stringify([{ prod_date: e.date, shift: e.shift, lines: e.lines, error_type: e.type, note: e.note || null }]);
+        var body = JSON.stringify([{
+          prod_date: e.date, shift: e.shift, lines: e.lines, error_type: e.type, note: e.note || null,
+          details: e.details || null, files: e.files && e.files.length ? e.files : null,
+        }]);
         return fetch(BASE, {
           method: "POST",
           headers: Object.assign({ Prefer: "return=representation" }, HEADERS),
@@ -118,6 +310,7 @@
   /* ---------------- state ---------------- */
   var S = {
     entries: [], shift: null, linesSel: [], period: "all",
+    staged: [], details: null,
     confirmId: null, confirmTimer: null, toastTimer: null, saving: false,
   };
 
@@ -189,7 +382,7 @@
     return v === "__other" ? $("typeOther").value.trim() : v;
   }
   function syncClearBtn() {
-    var dirty = S.shift || S.linesSel.length || $("typeSel").value || $("noteInput").value;
+    var dirty = S.shift || S.linesSel.length || $("typeSel").value || $("noteInput").value || S.staged.length || S.details;
     $("clearBtn").classList.toggle("hidden", !dirty);
   }
   function showErr(m) { var b = $("errBox"); b.textContent = m; b.classList.remove("hidden"); }
@@ -201,6 +394,12 @@
     clearTimeout(S.toastTimer);
     S.toastTimer = setTimeout(function () { t.classList.add("hidden"); }, 2600);
   }
+  function clearStaged() {
+    S.staged.forEach(function (f) { if (f.thumb) URL.revokeObjectURL(f.thumb); });
+    S.staged = [];
+    S.details = null;
+    renderStaged();
+  }
   function clearForm() {
     $("dateInput").value = yesterdayStr();
     S.shift = null; syncShift();
@@ -209,8 +408,118 @@
     $("typeOther").value = "";
     $("typeOther").classList.add("hidden");
     $("noteInput").value = "";
+    clearStaged();
     hideErr();
     syncClearBtn();
+  }
+
+  /* ---------------- intake: staging + prefill ---------------- */
+  function renderStaged() {
+    var area = $("stagedArea");
+    var parts = [];
+    if (S.details) {
+      parts.push('<span class="sfile" title="Email details will be saved with the record">\u2709 ' +
+        esc((S.details.subject || "email").slice(0, 40)) + '<button type="button" class="sx" data-undetail="1" title="Remove email details">\u00d7</button></span>');
+    }
+    S.staged.forEach(function (f, i) {
+      var thumb = f.thumb ? '<img src="' + f.thumb + '" alt="" />' : "\ud83d\udcc4";
+      parts.push('<span class="sfile">' + thumb + '<span class="sname" title="' + esc(f.name) + '">' + esc(f.name) +
+        "</span><span>" + Math.max(1, Math.round(f.bytes.length / 1024)) + ' KB</span><button type="button" class="sx" data-unstage="' +
+        i + '" title="Remove">\u00d7</button></span>');
+    });
+    area.innerHTML = parts.join("");
+    area.classList.toggle("hidden", parts.length === 0);
+    syncClearBtn();
+  }
+
+  function stageFile(name, mime, bytes) {
+    if (!bytes || !bytes.length) return;
+    if (bytes.length > 8 * 1024 * 1024) { toast("Skipped " + name + " \u2014 larger than 8 MB"); return; }
+    mime = mime || guessMime(name);
+    var f = { name: name || "file", mime: mime, bytes: bytes, thumb: null };
+    if (/^image\//i.test(mime)) {
+      try { f.thumb = URL.createObjectURL(new Blob([bytes], { type: mime })); } catch (e) {}
+    }
+    S.staged.push(f);
+    renderStaged();
+  }
+
+  function applyEmail(mail, srcName) {
+    S.details = {
+      subject: mail.subject || "",
+      from: mail.from || "",
+      sent: mail.sentDate ? mail.sentDate.toISOString() : "",
+      body: (mail.body || "").slice(0, 4000),
+      source: srcName || "",
+    };
+    var det = detect((mail.subject || "") + "\n" + (mail.body || ""), mail.sentDate);
+    if (!S.shift && det.shift) { S.shift = det.shift; syncShift(); }
+    det.lines.forEach(function (l) { if (S.linesSel.indexOf(l) === -1) S.linesSel.push(l); });
+    syncBoard();
+    if (det.date) $("dateInput").value = det.date;
+    else if (mail.sentDate) $("dateInput").value = dstr(mail.sentDate);
+    if (!getType() && det.type) $("typeSel").value = det.type;
+    if (!$("noteInput").value && mail.subject) $("noteInput").value = mail.subject;
+    (mail.attachments || []).forEach(function (a) {
+      var mime = a.mime || guessMime(a.name);
+      if (/^image\//i.test(mime) && a.bytes.length < 5 * 1024) return; // skip signature logos
+      stageFile(a.name, mime, a.bytes);
+    });
+    renderStaged();
+    hideErr();
+    toast("Email read \u2014 review the prefilled fields, then Save");
+  }
+
+  function processFiles(fileList) {
+    Array.prototype.slice.call(fileList || []).forEach(function (f) {
+      var name = (f.name || "").toLowerCase();
+      if (name.slice(-4) === ".msg") {
+        f.arrayBuffer().then(function (buf) {
+          if (!window.MsgParse) throw new Error("msg parser not loaded");
+          applyEmail(window.MsgParse(buf), f.name);
+        }).catch(function () { toast("Couldn't read " + f.name + " \u2014 is it a saved Outlook email?"); });
+      } else if (name.slice(-4) === ".eml" || f.type === "message/rfc822") {
+        f.arrayBuffer().then(function (buf) {
+          var u8 = new Uint8Array(buf), s = "";
+          for (var i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+          applyEmail(parseEml(s), f.name);
+        }).catch(function () { toast("Couldn't read " + f.name); });
+      } else if (/^image\//i.test(f.type) || f.type === "application/pdf" || /\.(png|jpe?g|gif|webp|pdf)$/.test(name)) {
+        f.arrayBuffer().then(function (buf) {
+          stageFile(f.name, f.type || guessMime(f.name), new Uint8Array(buf));
+        }).catch(function () { toast("Couldn't read " + f.name); });
+      } else {
+        toast("Skipped " + f.name + " \u2014 drop .msg, .eml, images, or PDFs");
+      }
+    });
+  }
+
+  /* ---------------- save (with uploads) ---------------- */
+  function safeName(n) { return String(n || "file").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80); }
+
+  function buildFiles(date) {
+    if (!S.staged.length) return Promise.resolve([]);
+    if (store.shared) {
+      var out = [];
+      var chainP = Promise.resolve();
+      S.staged.forEach(function (f) {
+        chainP = chainP.then(function () {
+          var path = (date || "misc").slice(0, 7) + "/" + uid() + "-" + safeName(f.name);
+          return store.uploadFile(path, f.mime, f.bytes).then(function (url) {
+            out.push({ name: f.name, type: f.mime, size: f.bytes.length, path: path, url: url });
+          });
+        });
+      });
+      return chainP.then(function () { return out; });
+    }
+    var localOut = [];
+    var skipped = 0;
+    S.staged.forEach(function (f) {
+      if (f.bytes.length > 400 * 1024) { skipped++; return; }
+      localOut.push({ name: f.name, type: f.mime, size: f.bytes.length, dataUrl: "data:" + f.mime + ";base64," + bytesToB64(f.bytes) });
+    });
+    if (skipped) toast(skipped + " large file(s) skipped \u2014 device-only mode can't hold them");
+    return Promise.resolve(localOut);
   }
 
   function saveEntry() {
@@ -223,22 +532,26 @@
     if (!getType()) missing.push("an error type");
     if (missing.length) { showErr("Add " + missing.join(", ") + "."); return; }
     hideErr();
-    var entry = {
-      date: date, shift: S.shift,
-      lines: ALL_LINES.filter(function (l) { return S.linesSel.indexOf(l) !== -1; }),
-      type: getType(), note: $("noteInput").value.trim(),
-    };
     S.saving = true;
     $("saveBtn").disabled = true;
     $("saveBtn").textContent = "Saving\u2026";
-    store.save(entry).then(function (saved) {
+    buildFiles(date).then(function (files) {
+      var entry = {
+        date: date, shift: S.shift,
+        lines: ALL_LINES.filter(function (l) { return S.linesSel.indexOf(l) !== -1; }),
+        type: getType(), note: $("noteInput").value.trim(),
+        details: S.details, files: files,
+      };
+      return store.save(entry);
+    }).then(function (saved) {
       S.entries.push(saved);
       $("noteInput").value = "";
+      clearStaged();
       renderAll();
       toast("Saved \u2014 Shift " + saved.shift + ", " + fmtDate(saved.date));
     }).catch(function (err) {
       var why = err && err.message && err.message !== "Failed to fetch" ? err.message : "check your connection and try again";
-      showErr("Couldn't save \u2014 " + why + ". (If this mentions a missing table, run the compliance SQL from the README.)");
+      showErr("Couldn't save \u2014 " + why + ". (If this mentions a missing table or bucket, run the compliance SQL from the README.)");
     }).finally(function () {
       S.saving = false;
       $("saveBtn").disabled = false;
@@ -249,7 +562,12 @@
   function removeEntry(id) {
     S.confirmId = null;
     clearTimeout(S.confirmTimer);
+    var ent = null;
+    for (var i = 0; i < S.entries.length; i++) if (S.entries[i].id === id) { ent = S.entries[i]; break; }
     store.remove(id).then(function () {
+      if (ent && store.shared) {
+        (ent.files || []).forEach(function (f) { if (f.path) store.deleteFile(f.path); });
+      }
       S.entries = S.entries.filter(function (e) { return e.id !== id; });
       renderAll();
       toast("Record deleted");
@@ -293,17 +611,13 @@
       return;
     }
     var st = computeStats(list);
-
     var chips = [1, 2, 3].map(function (s) {
       return '<div class="stat"><span class="stat-k">Shift ' + s + '</span><b>' + st.byShift[s] + "</b></div>";
     }).join("") + '<div class="stat stat-total"><span class="stat-k">Total</span><b>' + list.length + "</b></div>";
-
     var types = Object.keys(st.byType).sort(function (a, b) { return st.byType[b] - st.byType[a]; })
       .map(function (t) { return '<div class="stat"><span class="stat-k">' + esc(t) + '</span><b>' + st.byType[t] + "</b></div>"; }).join("");
-
     var lines = Object.keys(st.byLine).sort(function (a, b) { return st.byLine[b] - st.byLine[a]; }).slice(0, 6)
       .map(function (l) { return '<div class="stat"><span class="stat-k">' + esc(l) + '</span><b>' + st.byLine[l] + "</b></div>"; }).join("");
-
     var wkKeys = Object.keys(st.weeks).sort();
     if (wkKeys.length > 12) wkKeys = wkKeys.slice(-12);
     var maxTotal = 1;
@@ -316,7 +630,6 @@
         "<td class='mx-n mx-t'>" + w.total + "</td>" +
         "<td class='mx-bar'><span style='width:" + barW + "%'></span></td></tr>";
     }).join("");
-
     area.innerHTML =
       '<div class="stat-block"><div class="stat-h">Errors by shift</div><div class="stat-row">' + chips + "</div></div>" +
       '<div class="stat-block"><div class="stat-h">By error type</div><div class="stat-row">' + types + "</div></div>" +
@@ -354,7 +667,6 @@
       return ["Wk of " + fmtDate(k), w[1], w[2], w[3], w.total];
     });
     data.push(["All weeks", st.byShift[1], st.byShift[2], st.byShift[3], list.length]);
-
     var tsv = title + "\n" + [head].concat(data).map(function (r) { return r.join("\t"); }).join("\n");
     var cellCss = "border:1px solid #8a8a8a;padding:4px 8px;";
     var th = head.map(function (x) { return '<th style="' + cellCss + 'background:#efefef;text-align:left">' + esc(x) + "</th>"; }).join("");
@@ -377,7 +689,7 @@
     }
   }
 
-  /* ---------------- log + export ---------------- */
+  /* ---------------- records table ---------------- */
   function sortedEntries() {
     return S.entries.slice().sort(function (a, b) {
       if (a.date < b.date) return 1;
@@ -394,7 +706,7 @@
     $("exportBtn").textContent = "Export CSV (all " + n + ")";
     $("exportBtn").disabled = n === 0;
     if (!vis.length) {
-      area.innerHTML = '<div class="empty">No records yet \u2014 save the first one above.</div>';
+      area.innerHTML = '<div class="empty">No records yet \u2014 save the first one above, or drop an email into the form.</div>';
       return;
     }
     var mk = function (tag, cls, text) {
@@ -418,9 +730,20 @@
       tr.appendChild(mk("td", "c-date", fmtDate(e.date)));
       tr.appendChild(mk("td", "mx-n", String(e.shift)));
       tr.appendChild(mk("td", "c-line", (e.lines || []).join(", ")));
-      tr.appendChild(mk("td", "c-desc", e.type));
+      var tdT = mk("td", "c-desc", e.type);
+      var nf = (e.files || []).length;
+      if (nf || e.details) {
+        var badge = mk("span", "badge-clip", (nf ? "\ud83d\udcce" + nf : "\u2709"));
+        badge.title = nf ? nf + " attachment(s)" : "Email details attached";
+        tdT.appendChild(badge);
+      }
+      tr.appendChild(tdT);
       tr.appendChild(mk("td", "c-note", e.note || ""));
       var tdA = mk("td", "c-act");
+      var vw = mk("button", "ghost sm", "View");
+      vw.type = "button";
+      vw.setAttribute("data-view", e.id);
+      tdA.appendChild(vw);
       if (S.confirmId === e.id) {
         var cd = mk("button", "ghost sm danger", "Confirm delete");
         cd.type = "button";
@@ -443,6 +766,53 @@
 
   function renderAll() { renderStats(); renderLog(); }
 
+  /* ---------------- detail viewer ---------------- */
+  function fileHref(f) { return f.url || f.dataUrl || ""; }
+  function openDetail(id) {
+    var e = null;
+    for (var i = 0; i < S.entries.length; i++) if (S.entries[i].id === id) { e = S.entries[i]; break; }
+    if (!e) return;
+    var h = '<div class="dm-grid">' +
+      '<span class="dm-k">Production</span><span>' + esc(fmtDate(e.date)) + "</span>" +
+      '<span class="dm-k">Shift</span><span>' + esc(e.shift) + "</span>" +
+      '<span class="dm-k">Lines</span><span>' + esc((e.lines || []).join(", ")) + "</span>" +
+      '<span class="dm-k">Error type</span><span>' + esc(e.type) + "</span>" +
+      (e.note ? '<span class="dm-k">Note</span><span>' + esc(e.note) + "</span>" : "") +
+      "</div>";
+    if (e.details) {
+      h += '<div class="dm-grid">' +
+        (e.details.from ? '<span class="dm-k">From</span><span>' + esc(e.details.from) + "</span>" : "") +
+        (e.details.sent ? '<span class="dm-k">Sent</span><span>' + esc(new Date(e.details.sent).toLocaleString()) + "</span>" : "") +
+        (e.details.subject ? '<span class="dm-k">Subject</span><span>' + esc(e.details.subject) + "</span>" : "") +
+        "</div>";
+      if (e.details.body) h += '<div class="dm-body">' + esc(e.details.body) + "</div>";
+    }
+    var imgs = (e.files || []).filter(function (f) { return /^image\//i.test(f.type || "") && fileHref(f); });
+    var others = (e.files || []).filter(function (f) { return imgs.indexOf(f) === -1; });
+    if (imgs.length) {
+      h += '<div class="dm-imgs">' + imgs.map(function (f) {
+        var u = fileHref(f);
+        return '<a href="' + esc(u) + '" target="_blank" rel="noopener" title="' + esc(f.name) + '"><img src="' + esc(u) + '" alt="' + esc(f.name) + '" /></a>';
+      }).join("") + "</div>";
+    }
+    if (others.length) {
+      h += '<div class="dm-files">' + others.map(function (f) {
+        var u = fileHref(f);
+        var inner = "\ud83d\udcc4 " + esc(f.name) + " (" + Math.max(1, Math.round((f.size || 0) / 1024)) + " KB)";
+        return u
+          ? '<a href="' + esc(u) + '" target="_blank" rel="noopener" download="' + esc(f.name) + '">' + inner + "</a>"
+          : "<span>" + inner + " \u2014 too large for device-only storage</span>";
+      }).join("") + "</div>";
+    }
+    if (!e.details && !(e.files || []).length) {
+      h += '<div class="empty">No email or attachments on this record.</div>';
+    }
+    $("detailBody").innerHTML = h;
+    $("detailModal").classList.remove("hidden");
+  }
+  function closeDetail() { $("detailModal").classList.add("hidden"); }
+
+  /* ---------------- export ---------------- */
   function requestExport() {
     if (!cfg.EXPORT_PASSWORD) { doExportCsv(); return; }
     $("pwInput").value = "";
@@ -462,9 +832,10 @@
   function doExportCsv() {
     var vis = sortedEntries();
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Date of production", "Shift", "Lines", "Type of error", "Note", "Logged at"]];
+    var rows = [["Date of production", "Shift", "Lines", "Type of error", "Note", "Attachments", "Logged at"]];
     vis.forEach(function (e) {
-      rows.push([e.date, e.shift, (e.lines || []).join("; "), e.type, e.note || "", new Date(e.ts).toLocaleString()]);
+      rows.push([e.date, e.shift, (e.lines || []).join("; "), e.type, e.note || "",
+        (e.files || []).map(function (f) { return f.url || f.name; }).join(" "), new Date(e.ts).toLocaleString()]);
     });
     var csv = rows.map(function (r) { return r.map(cell).join(","); }).join("\r\n");
     var blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -478,6 +849,36 @@
 
   /* ---------------- events ---------------- */
   function wireEvents() {
+    var dz = $("dropZone");
+    ["dragover", "dragenter"].forEach(function (t) {
+      dz.addEventListener(t, function (e) { e.preventDefault(); dz.classList.add("drag"); });
+    });
+    ["dragleave", "dragend"].forEach(function (t) {
+      dz.addEventListener(t, function () { dz.classList.remove("drag"); });
+    });
+    dz.addEventListener("drop", function (e) {
+      e.preventDefault();
+      dz.classList.remove("drag");
+      if (e.dataTransfer && e.dataTransfer.files) processFiles(e.dataTransfer.files);
+    });
+    dz.addEventListener("click", function () { $("fileInput").click(); });
+    $("fileInput").addEventListener("change", function () { processFiles(this.files); this.value = ""; });
+    document.addEventListener("dragover", function (e) { e.preventDefault(); });
+    document.addEventListener("drop", function (e) { if (!dz.contains(e.target)) e.preventDefault(); });
+
+    $("stagedArea").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      if (b.hasAttribute("data-unstage")) {
+        var f = S.staged.splice(Number(b.getAttribute("data-unstage")), 1)[0];
+        if (f && f.thumb) URL.revokeObjectURL(f.thumb);
+        renderStaged();
+      } else if (b.hasAttribute("data-undetail")) {
+        S.details = null;
+        renderStaged();
+      }
+    });
+
     $("shiftGroup").addEventListener("click", function (e) {
       var b = e.target.closest(".chip");
       if (!b) return;
@@ -520,9 +921,19 @@
       if (e.key === "Enter") tryPw();
       if (e.key === "Escape") closePw();
     });
+    $("detailClose").addEventListener("click", closeDetail);
+    $("detailModal").addEventListener("click", function (e) { if (e.target === this) closeDetail(); });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !$("detailModal").classList.contains("hidden")) closeDetail();
+    });
     $("logArea").addEventListener("click", function (e) {
       var b = e.target.closest("button");
-      if (!b) return;
+      if (!b) {
+        var tr = e.target.closest("tbody tr");
+        if (tr && tr.dataset.id) openDetail(tr.dataset.id);
+        return;
+      }
+      if (b.hasAttribute("data-view")) { openDetail(b.getAttribute("data-view")); return; }
       if (b.hasAttribute("data-ask")) {
         S.confirmId = b.getAttribute("data-ask");
         clearTimeout(S.confirmTimer);
@@ -534,6 +945,17 @@
     });
   }
 
-  if (document.readyState !== "loading") init();
-  else document.addEventListener("DOMContentLoaded", init);
+  // browser bootstrap + test seams
+  if (typeof document !== "undefined") {
+    window.__c = { processFiles: processFiles, parseEml: parseEml, detect: detect };
+    if (document.readyState !== "loading") init();
+    else document.addEventListener("DOMContentLoaded", init);
+  }
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = {
+      parseEml: parseEml, detect: detect, rfc2047: rfc2047, qpToBytes: qpToBytes,
+      stripHtml: stripHtml, weekKey: weekKey, computeStats: computeStats,
+      ALL_LINES: ALL_LINES, ERROR_TYPES: ERROR_TYPES, LINE_ALIASES: LINE_ALIASES,
+    };
+  }
 })();

@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="styles.css?v=20260801a" />
+  <link rel="stylesheet" href="styles.css?v=20260815a" />
 </head>
 <body>
   <header class="head">
@@ -32,13 +32,32 @@
 
   <main class="main">
     <!-- ================= new record ================= -->
-    <section class="card">
+    <section class="card" id="dropCard">
       <div class="card-head">
         <h2 class="label"><span class="sq"></span>New compliance record</h2>
         <div class="card-head-actions">
           <button class="ghost hidden" id="clearBtn" type="button">Clear</button>
         </div>
       </div>
+
+      <div class="drop-hint" id="dropHint">
+        <b>Drag an email here</b> to auto-fill this form &mdash; .eml files work (in new Outlook / Outlook on the web:
+        &#8943; menu &rarr; <b>Download</b>). Attached images ride along and get saved with the record.
+        You can also drop image files directly.
+      </div>
+
+      <div class="staged hidden" id="stagedBox">
+        <span id="stagedText"></span>
+        <button class="ghost sm" id="stagedClear" type="button">Remove</button>
+      </div>
+
+      <div class="dropzone" id="dropZone" tabindex="0">
+        <strong>Drop a saved email here</strong> (.msg or .eml) — or proof images/PDFs.
+        I'll read it, prefill the form, and attach the images. <span class="dz-browse">Click to browse.</span>
+        <input type="file" id="fileInput" class="hidden" multiple
+          accept=".msg,.eml,image/*,application/pdf" />
+      </div>
+      <div class="staged hidden" id="stagedArea"></div>
 
       <div class="quad quad-c">
         <div class="field">
@@ -114,6 +133,18 @@
     </p>
   </div>
 
+  
+
+  <div class="modal-bg hidden" id="detailModal">
+    <div class="modal modal-wide">
+      <div class="card-head">
+        <h3 class="label"><span class="sq"></span>Record details</h3>
+        <button class="ghost sm" id="detailClose" type="button">Close</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </div>
+
   <div class="modal-bg hidden" id="pwModal">
     <div class="modal">
       <h3 class="label"><span class="sq"></span>Export protected</h3>
@@ -129,7 +160,8 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js?v=20260801a"></script>
-  <script src="compliance.js?v=20260801a"></script>
+  <script src="config.js?v=20260815a"></script>
+  <script src="msgcfb.js?v=20260815a"></script>
+  <script src="compliance.js?v=20260815a"></script>
 </body>
 </html>

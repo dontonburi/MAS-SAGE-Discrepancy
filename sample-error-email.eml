@@ -1,0 +1,19 @@
+From: QA Team <qa@plant.com>
+Date: Thu, 30 Jul 2026 08:15:00 -0400
+Subject: =?utf-8?Q?Missing_usage_proofs_=E2=80=93_Aerosol_A?=
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="XBND"
+
+--XBND
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+The proof sheet was missing for Aerosol A on 7/29/2026, shift 2.
+Please see attached photo =3D taken this morning.
+--XBND
+Content-Type: image/png; name="proof photo.png"
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="proof photo.png"
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==
+--XBND--
