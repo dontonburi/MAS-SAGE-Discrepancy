@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Material Summary — Usage Log</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="styles.css?v=20260817a" />
+</head>
+<body>
+  <header class="head">
+    <div class="head-inner">
+      <div>
+        <div class="brand">
+          <span class="tick"></span>
+          <h1>Material Summary</h1>
+        </div>
+        <p class="sub">Where the discrepancies land — by packaging vs ingredients, by product line, week over week.</p>
+      </div>
+      <div class="head-right">
+        <a class="pill pill-link" href="index.html">&larr; Usage log</a>
+        <a class="pill pill-link" href="compliance.html">Paperwork compliance &rarr;</a>
+        <span class="pill pill-warn" id="statusPill"><span class="dot"></span><span id="statusText">Locked</span></span>
+        <span class="count" id="entryCount">&mdash;</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- password gate -->
+  <main class="main" id="gateArea">
+    <section class="card">
+      <h2 class="label"><span class="sq"></span>Protected view</h2>
+      <p class="pw-note">
+        This page shows material costs, so it asks for the same password as the CSV export.
+      </p>
+      <div class="gate-row">
+        <input type="password" id="gateInput" class="input" placeholder="Password" autocomplete="off" />
+        <button class="save save-sm" id="gateBtn" type="button">Unlock</button>
+      </div>
+      <div class="pw-err hidden" id="gateErr">Wrong password — try again.</div>
+    </section>
+  </main>
+
+  <!-- summary (revealed after unlock) -->
+  <div class="main wide hidden" id="sumArea">
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Totals by material type</h2>
+        <div class="card-head-actions">
+          <select id="periodSel" class="input input-slim" title="Period">
+            <option value="all">All time</option>
+            <option value="90">Last 90 days</option>
+            <option value="30">Last 30 days</option>
+          </select>
+          <select id="metricSel" class="input input-slim" title="What the numbers show">
+            <option value="count">Count of entries</option>
+            <option value="value">Value ($)</option>
+          </select>
+          <button class="ghost" id="refreshBtn" type="button">Refresh</button>
+          <button class="ghost accent" id="copySumBtn" type="button" disabled>Copy summary</button>
+          <button class="ghost" id="exportBtn" type="button" disabled>Export CSV</button>
+        </div>
+      </div>
+      <div id="totalsArea"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Week by week</h2>
+        <span class="sel-summary">Weeks run Monday–Sunday, by production date.</span>
+      </div>
+      <div id="weeklyArea"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Most-affected items</h2>
+        <span class="sel-summary">Top 15 by the selected measure.</span>
+      </div>
+      <div id="topArea"></div>
+    </section>
+
+    <p class="foot">
+      Categories come from the item description prefix — <span class="mono">PK</span> packaging,
+      <span class="mono">IN</span> ingredients, then A aerosol, P pops, D drinks, W water. Edit the
+      labels or add rules at the top of <span class="mono">taxonomy.js</span>.
+    </p>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="config.js?v=20260817a"></script>
+  <script src="materials.js?v=20260817a"></script>
+  <script src="taxonomy.js?v=20260817a"></script>
+  <script src="summary.js?v=20260817a"></script>
+</body>
+</html>

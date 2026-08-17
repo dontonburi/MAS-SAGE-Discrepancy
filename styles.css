@@ -239,6 +239,11 @@ textarea.input { resize: vertical; min-height: 41px; height: 41px; line-height: 
 }
 .foot { font-size: 12.5px; color: var(--muted); text-align: center; }
 
+/* summary page */
+.gate-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; max-width: 420px; }
+.gate-row .input { flex: 1; }
+.stat-pct { font-family: "IBM Plex Mono"; font-size: 11.5px; color: var(--muted); }
+
 /* compliance scoreboard */
 .quad-c { grid-template-columns: 170px auto 1fr; }
 @media (max-width: 760px) { .quad-c { grid-template-columns: 1fr 1fr; } }

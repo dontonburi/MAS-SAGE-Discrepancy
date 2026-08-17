@@ -142,6 +142,14 @@ create policy "compliance read"   on storage.objects for select using (bucket_id
 create policy "compliance upload" on storage.objects for insert with check (bucket_id = 'compliance');
 ```
 
+## Material summary page (password protected)
+
+`summary.html` breaks the usage log down by material type and product line. It is **not** linked into the log's contents and asks for the same password as the CSV export before showing anything, because it displays costs.
+
+Categories come from the item description prefix: `PK` packaging and `IN` ingredients, then the product line — A aerosol, P pops, D drinks, W water (plus any other letters in use, shown as-is until named). The parser tolerates the messy real-world variants (`IN_A_...`, `PK- A- ...`, `IN-A 3 Fold Vanilla`), and a short override list catches materials that predate the convention (city/spring/distilled water, pallets and CHEP). Anything else — mostly finished goods — is counted honestly as "Unclassified" rather than guessed at. To name a category or add an override, edit the top of `taxonomy.js`.
+
+The page shows totals for packaging vs ingredients, by product line, and the two combined; a week-by-week table (Monday–Sunday, by production date) with a bar per week; and the 15 most-affected items. A toggle switches every number between **count of entries** and **value in dollars**, and entries whose item has no unit cost on file are reported as a count rather than silently treated as $0. Copy summary puts the weekly table on the clipboard; Export CSV writes the whole breakdown.
+
 ## Drop an email onto the compliance form
 
 Drag a saved email file onto the dashed box on the compliance page and it reads the message, prefills date of production, shift, lines, and error type from the subject/body, puts the subject in the note, and stages the attached images (tiny signature logos are ignored). Review, adjust, Save. Clicking any record (or its **View** button) opens the details: the email's sender, subject, and body, plus the attached photos.
@@ -173,7 +181,7 @@ New material in the system? Open `materials.js` and add a line inside the big qu
 
 ## Filters, prices, and the export password
 
-The log filters by search, production date, status, name, and line. The default status view ("Open + rectified") shows every open entry plus rectified entries from the last 3 days — so once everything is resolved, it reads as all records from the last 3 days. "Open only" and "Resolved only" each show the complete history for that status, and the CSV export always contains everything. Item unit costs can be stored as a hidden third column in `materials.js` (`CODE<TAB>DESC<TAB>PRICE`) — they never appear on screen or in Copy table; only the CSV export includes them, as **Unit $** and **$ Total** columns.
+The log filters by search, production date, status, name, and line. The default status view ("Open + rectified") shows every open entry plus rectified entries from the last 3 days — so once everything is resolved, it reads as all records from the last 3 days. "Open only" and "Resolved only" each show the complete history for that status, and the CSV export always contains everything. Item unit costs can be stored as a hidden third column in `materials.js` (`CODE<TAB>DESC<TAB>PRICE`) — they never appear on screen or in Copy table; only the CSV export and the password-protected summary page include them. Costs come from the `AverageUnitCost` column of a CI_Item export.
 
 **Export CSV always contains the complete history** — every entry ever logged, ignoring the on-screen filters — and asks for a password before downloading. The password lives in `config.js` (`EXPORT_PASSWORD`; blank turns it off). It deters casual clicks, but anyone reading the page source can find it. Copy table follows the current view/selection and is not password-gated.
 
