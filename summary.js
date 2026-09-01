@@ -55,7 +55,10 @@
   }
 
   /* ---------------- state ---------------- */
-  var S = { entries: [], period: "all", metric: "count", toastTimer: null };
+  var S = {
+    entries: [], period: "all", metric: "count", toastTimer: null,
+    fType: null, fCat: null, fMonth: null,   // drill-down, set by clicking the dashboard
+  };
 
   function toast(m) {
     var t = $("toast");
@@ -108,6 +111,17 @@
     var cut = dstr(d);
     return S.entries.filter(function (e) { return (e.date || "") >= cut; });
   }
+  function matchesDrill(e) {
+    if (!S.fType && !S.fCat && !S.fMonth) return true;
+    var c = classifyCode(e.code, e.desc);
+    if (S.fType && (c.type || "") !== S.fType) return false;
+    if (S.fCat && (c.cat || (c.type ? "-" : "")) !== S.fCat) return false;
+    if (S.fMonth && monthKey(e.date) !== S.fMonth) return false;
+    return true;
+  }
+  function drillEntries() { return periodEntries().filter(matchesDrill); }
+  function drillActive() { return !!(S.fType || S.fCat || S.fMonth); }
+
   function valueOf(e) {
     var p = PRICE[e.code];
     return p == null ? 0 : p * e.qty;
@@ -117,6 +131,7 @@
 
   function aggregate(list) {
     var byType = {}, byCat = {}, byKey = {}, byItem = {}, weeks = {}, months = {}, catKeys = {};
+    var typeCodes = {}, catCodes = {};
     var missingPrice = 0, totalVal = 0;
     list.forEach(function (e) {
       var c = classifyCode(e.code, e.desc);
@@ -125,6 +140,12 @@
       var m = measure(e);
       byType[tl] = (byType[tl] || 0) + m;
       byCat[cl] = (byCat[cl] || 0) + m;
+      var tcode = c.type || "";
+      var ccode = c.cat || (c.type ? "-" : "");
+      if (!typeCodes[tcode]) typeCodes[tcode] = { code: tcode, label: tl, v: 0 };
+      typeCodes[tcode].v += m;
+      if (!catCodes[ccode]) catCodes[ccode] = { code: ccode, label: cl, v: 0 };
+      catCodes[ccode].v += m;
       byKey[c.label] = (byKey[c.label] || 0) + m;
       catKeys[cl] = 1;
       var ik = e.code + "\u0000" + (e.desc || DESC[e.code] || "");
@@ -152,6 +173,7 @@
     });
     return {
       byType: byType, byCat: byCat, byKey: byKey, weeks: weeks, months: months,
+      typeCodes: typeCodes, catCodes: catCodes,
       cats: Object.keys(catKeys).sort(),
       items: Object.keys(byItem).map(function (k) { return byItem[k]; }),
       missingPrice: missingPrice, totalVal: totalVal, n: list.length,
@@ -159,61 +181,94 @@
   }
 
   /* ---------------- rendering ---------------- */
-  function statRow(obj, totalForPct) {
-    var keys = Object.keys(obj).sort(function (a, b) { return obj[b] - obj[a]; });
-    if (!keys.length) return '<div class="empty">Nothing in this period.</div>';
-    return '<div class="stat-row">' + keys.map(function (k) {
-      var pct = totalForPct ? Math.round((obj[k] / totalForPct) * 100) : 0;
-      return '<div class="stat"><span class="stat-k">' + esc(k) + "</span><b>" + fmtMeasure(obj[k]) +
-        '</b><span class="stat-pct">' + pct + "%</span></div>";
-    }).join("") + "</div>";
-  }
+  var PALETTE = ["#1f6f8b", "#e8b33c", "#4b8f6d", "#a8562f", "#6b5b95", "#8a8f5c", "#b3617a", "#4a5a65"];
+  function colorFor(i) { return PALETTE[i % PALETTE.length]; }
 
-  function renderTotals(ag) {
-    var area = $("totalsArea");
-    if (!ag.n) {
-      area.innerHTML = '<div class="empty">No entries in this period.</div>';
-      return;
-    }
-    var totalMeasure = S.metric === "value" ? ag.totalVal : ag.n;
-    var head = '<div class="stat-row"><div class="stat stat-total"><span class="stat-k">Entries</span><b>' + num(ag.n) + "</b></div>" +
-      '<div class="stat stat-total"><span class="stat-k">Value</span><b>' + money(ag.totalVal) + "</b></div>" +
+  function pct(v, total) { return total ? (v / total) * 100 : 0; }
+
+  /* Compact KPI strip */
+  function kpiStrip(ag, list) {
+    var dates = list.map(function (e) { return e.date; }).filter(Boolean).sort();
+    var range = dates.length ? fmtDate(dates[0]) + " \u2013 " + fmtDate(dates[dates.length - 1]) : "\u2014";
+    return '<div class="kpis">' +
+      '<div class="kpi"><span>Entries</span><b>' + num(ag.n) + "</b></div>" +
+      '<div class="kpi kpi-hi"><span>Value</span><b>' + money(ag.totalVal) + "</b></div>" +
+      '<div class="kpi"><span>Dates</span><b class="kpi-sm">' + esc(range) + "</b></div>" +
       (ag.missingPrice
-        ? '<div class="stat"><span class="stat-k">No unit cost on file</span><b>' + num(ag.missingPrice) + "</b></div>"
-        : "") + "</div>";
-    area.innerHTML =
-      head +
-      '<div class="stat-block"><div class="stat-h">Packaging vs ingredients</div>' + statRow(ag.byType, totalMeasure) + "</div>" +
-      '<div class="stat-block"><div class="stat-h">By product line</div>' + statRow(ag.byCat, totalMeasure) + "</div>" +
-      '<div class="stat-block"><div class="stat-h">Type \u00d7 line</div>' + statRow(ag.byKey, totalMeasure) + "</div>";
+        ? '<div class="kpi"><span>No unit cost</span><b class="kpi-sm">' + num(ag.missingPrice) + " entries</b></div>"
+        : "") +
+      "</div>";
   }
 
-  function renderWeekly(ag) {
-    var area = $("weeklyArea");
-    var wkKeys = Object.keys(ag.weeks).sort();
-    if (!wkKeys.length) {
+  /* One stacked bar, segments clickable */
+  function stackedBar(entries, total, dim) {
+    var segs = entries.filter(function (x) { return x.v > 0; })
+      .sort(function (x, y) { return y.v - x.v; });
+    if (!segs.length) return "";
+    var bar = segs.map(function (s, i) {
+      var w = pct(s.v, total);
+      var on = (dim === "type" ? S.fType : S.fCat) === s.code;
+      return '<button type="button" class="seg' + (on ? " on" : "") + '" data-dim="' + dim +
+        '" data-code="' + esc(s.code) + '" style="width:' + w.toFixed(2) + "%;background:" + colorFor(i) +
+        '" title="' + esc(s.label) + ": " + esc(fmtMeasure(s.v)) + " (" + Math.round(w) + '%)"></button>';
+    }).join("");
+    var legend = segs.map(function (s, i) {
+      var on = (dim === "type" ? S.fType : S.fCat) === s.code;
+      return '<button type="button" class="lg' + (on ? " on" : "") + '" data-dim="' + dim +
+        '" data-code="' + esc(s.code) + '"><span class="lg-dot" style="background:' + colorFor(i) + '"></span>' +
+        esc(s.label) + "<b>" + esc(fmtMeasure(s.v)) + "</b><i>" + Math.round(pct(s.v, total)) + "%</i></button>";
+    }).join("");
+    return '<div class="sbar">' + bar + '</div><div class="lgs">' + legend + "</div>";
+  }
+
+  /* Sparkline of the monthly trend */
+  function sparkline(ag) {
+    var keys = Object.keys(ag.months).sort();
+    if (keys.length < 2) return "";
+    var vals = keys.map(function (k) { return ag.months[k].total; });
+    var max = Math.max.apply(null, vals) || 1;
+    var w = 168, h = 40, step = keys.length > 1 ? w / (keys.length - 1) : w;
+    var pts = vals.map(function (v, i) { return (i * step).toFixed(1) + "," + (h - (v / max) * (h - 6) - 3).toFixed(1); });
+    var last = vals[vals.length - 1], prev = vals[vals.length - 2];
+    var dir = last > prev ? "up" : last < prev ? "down" : "flat";
+    var arrow = dir === "up" ? "\u25b2" : dir === "down" ? "\u25bc" : "\u2013";
+    var change = prev ? Math.round(((last - prev) / prev) * 100) : 0;
+    return '<div class="spark"><svg viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" aria-hidden="true">' +
+      '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#1f6f8b" stroke-width="2" stroke-linejoin="round" />' +
+      '<circle cx="' + (w).toFixed(1) + '" cy="' + (h - (last / max) * (h - 6) - 3).toFixed(1) + '" r="2.5" fill="#1f6f8b" />' +
+      "</svg>" +
+      '<div class="spark-cap">' + esc(fmtMonth(keys[0])) + " \u2192 " + esc(fmtMonth(keys[keys.length - 1])) +
+      ' <span class="dn-' + dir + '">' + arrow + " " + (prev ? (change > 0 ? "+" : "") + change + "%" : "\u2013") + "</span></div></div>";
+  }
+
+  function filterChip() {
+    if (!drillActive()) return "";
+    var bits = [];
+    if (S.fType) bits.push(TAX ? TAX.typeLabel(S.fType) : S.fType);
+    if (S.fCat) bits.push(S.fCat === "-" ? "Unspecified" : (TAX ? TAX.catLabel(S.fCat) : S.fCat));
+    if (S.fMonth) bits.push(fmtMonth(S.fMonth));
+    return '<div class="drill"><span class="drill-k">Filtered to</span> <b>' + esc(bits.join(" \u00b7 ")) +
+      '</b><button type="button" class="drill-x" id="clearDrill">Clear</button></div>';
+  }
+
+  function renderTotals(agAll, agDrill, listAll) {
+    var area = $("totalsArea");
+    if (!agAll.n) {
       area.innerHTML = '<div class="empty">No entries in this period.</div>';
       return;
     }
-    if (wkKeys.length > 14) wkKeys = wkKeys.slice(-14);
-    var cats = ag.cats;
-    var max = 1;
-    wkKeys.forEach(function (k) { if (ag.weeks[k].total > max) max = ag.weeks[k].total; });
-    var head = "<tr><th class='c-date'>Week of</th>" +
-      cats.map(function (c) { return "<th class='mx-n'>" + esc(c) + "</th>"; }).join("") +
-      "<th class='mx-n'>Total</th><th></th></tr>";
-    var rows = wkKeys.map(function (k) {
-      var w = ag.weeks[k];
-      var cells = cats.map(function (c) {
-        var v = w.cats[c] || 0;
-        return "<td class='mx-n'>" + (v ? fmtMeasure(v) : "\u00b7") + "</td>";
-      }).join("");
-      var barW = Math.round((w.total / max) * 100);
-      return "<tr><td class='c-date'>" + esc(fmtDate(k)) + "</td>" + cells +
-        "<td class='mx-n mx-t'>" + fmtMeasure(w.total) + "</td>" +
-        "<td class='mx-bar'><span style='width:" + barW + "%'></span></td></tr>";
-    }).join("");
-    area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
+    var totalAll = S.metric === "value" ? agAll.totalVal : agAll.n;
+    var types = Object.keys(agAll.typeCodes).map(function (k) { return agAll.typeCodes[k]; });
+    var cats = Object.keys(agAll.catCodes).map(function (k) { return agAll.catCodes[k]; });
+    area.innerHTML =
+      kpiStrip(drillActive() ? agDrill : agAll, drillActive() ? drillEntries() : listAll) +
+      filterChip() +
+      '<div class="dash">' +
+      '<div class="dash-b"><div class="stat-h">Packaging vs ingredients</div>' + stackedBar(types, totalAll, "type") + "</div>" +
+      '<div class="dash-b"><div class="stat-h">By product line</div>' + stackedBar(cats, totalAll, "cat") + "</div>" +
+      '<div class="dash-b dash-narrow"><div class="stat-h">Monthly trend</div>' + sparkline(agAll) + "</div>" +
+      "</div>" +
+      '<p class="dash-hint">Click any colour or label to focus that slice \u2014 the tables, the trend, and the one-page report all follow.</p>';
   }
 
   function deltaCell(cur, prev) {
@@ -249,9 +304,38 @@
         return "<td class='mx-n'>" + (v ? fmtMeasure(v) : "\u00b7") + "</td>";
       }).join("");
       var barW = Math.round((m.total / max) * 100);
-      return "<tr><td class='c-date'>" + esc(fmtMonth(k)) + "</td>" + cells +
+      return "<tr data-month='" + esc(k) + "'" + (S.fMonth === k ? " class='is-sel'" : "") +
+        "><td class='c-date'>" + esc(fmtMonth(k)) + "</td>" + cells +
         "<td class='mx-n mx-t'>" + fmtMeasure(m.total) + "</td>" +
         deltaCell(m.total, prev ? prev.total : null) +
+        "<td class='mx-bar'><span style='width:" + barW + "%'></span></td></tr>";
+    }).join("");
+    area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
+  }
+
+  function renderWeekly(ag) {
+    var area = $("weeklyArea");
+    var wkKeys = Object.keys(ag.weeks).sort();
+    if (!wkKeys.length) {
+      area.innerHTML = '<div class="empty">No entries in this period.</div>';
+      return;
+    }
+    if (wkKeys.length > 14) wkKeys = wkKeys.slice(-14);
+    var cats = ag.cats;
+    var max = 1;
+    wkKeys.forEach(function (k) { if (ag.weeks[k].total > max) max = ag.weeks[k].total; });
+    var head = "<tr><th class='c-date'>Week of</th>" +
+      cats.map(function (c) { return "<th class='mx-n'>" + esc(c) + "</th>"; }).join("") +
+      "<th class='mx-n'>Total</th><th></th></tr>";
+    var rows = wkKeys.map(function (k) {
+      var w = ag.weeks[k];
+      var cells = cats.map(function (c) {
+        var v = w.cats[c] || 0;
+        return "<td class='mx-n'>" + (v ? fmtMeasure(v) : "\u00b7") + "</td>";
+      }).join("");
+      var barW = Math.round((w.total / max) * 100);
+      return "<tr><td class='c-date'>" + esc(fmtDate(k)) + "</td>" + cells +
+        "<td class='mx-n mx-t'>" + fmtMeasure(w.total) + "</td>" +
         "<td class='mx-bar'><span style='width:" + barW + "%'></span></td></tr>";
     }).join("");
     area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
@@ -276,17 +360,19 @@
   }
 
   function renderAll() {
-    var list = periodEntries();
-    var ag = aggregate(list);
-    $("entryCount").textContent = ag.n + (ag.n === 1 ? " entry" : " entries");
-    $("copySumBtn").disabled = !ag.n;
-    $("exportBtn").disabled = !ag.n;
-    $("reportBtn").disabled = !ag.n;
-    renderTotals(ag);
-    renderMonthly(ag);
-    renderWeekly(ag);
-    renderTop(ag);
-    return ag;
+    var listAll = periodEntries();
+    var agAll = aggregate(listAll);
+    var listDrill = drillActive() ? listAll.filter(matchesDrill) : listAll;
+    var agDrill = drillActive() ? aggregate(listDrill) : agAll;
+    $("entryCount").textContent = agDrill.n + (agDrill.n === 1 ? " entry" : " entries");
+    $("copySumBtn").disabled = !agDrill.n;
+    $("exportBtn").disabled = !agDrill.n;
+    $("reportBtn").disabled = !agDrill.n;
+    renderTotals(agAll, agDrill, listAll);
+    renderMonthly(agDrill);
+    renderWeekly(agDrill);
+    renderTop(agDrill);
+    return agDrill;
   }
 
   /* ---------------- copy + export ---------------- */
@@ -304,7 +390,7 @@
   }
 
   function summaryRows() {
-    var ag = aggregate(periodEntries());
+    var ag = aggregate(drillEntries());
     var label = S.period === "all" ? "all time" : "last " + S.period + " days";
     var title = "Material summary (" + label + ") \u2014 " + ag.n + " entries, " + money(ag.totalVal);
     var wkKeys = Object.keys(ag.weeks).sort();
@@ -349,7 +435,7 @@
   }
 
   function exportCsv() {
-    var list = periodEntries();
+    var list = drillEntries();
     var ag = aggregate(list);
     var cell = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
     var rows = [];
@@ -385,12 +471,20 @@
   }
 
   /* ---------------- one-page report ---------------- */
+  function drillLabel() {
+    var bits = [];
+    if (S.fType) bits.push(TAX ? TAX.typeLabel(S.fType) : S.fType);
+    if (S.fCat) bits.push(S.fCat === "-" ? "Unspecified" : (TAX ? TAX.catLabel(S.fCat) : S.fCat));
+    if (S.fMonth) bits.push(fmtMonth(S.fMonth));
+    return bits.join(" \u00b7 ");
+  }
+
   function periodLabel() {
     return S.period === "all" ? "All time" : "Last " + S.period + " days";
   }
 
   function buildReport() {
-    var list = periodEntries();
+    var list = drillEntries();
     var ag = aggregate(list);
     var metricName = S.metric === "value" ? "Value ($)" : "Entries";
     var dates = list.map(function (e) { return e.date; }).filter(Boolean).sort();
@@ -441,7 +535,8 @@
 
     return '<div class="rp">' +
       '<div class="rp-head"><div><h1>Material Summary</h1>' +
-      "<p>" + esc(periodLabel()) + " \u00b7 measured by " + esc(metricName.toLowerCase()) +
+      "<p>" + esc(periodLabel()) + (drillActive() ? " \u00b7 " + esc(drillLabel()) : "") +
+      " \u00b7 measured by " + esc(metricName.toLowerCase()) +
       " \u00b7 generated " + esc(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })) + "</p></div>" +
       '<div class="rp-brand">Material Usage Log</div></div>' +
       kpis +
@@ -459,7 +554,7 @@
   }
 
   function printReport() {
-    var list = periodEntries();
+    var list = drillEntries();
     if (!list.length) { toast("Nothing to report for this filter"); return; }
     $("reportArea").innerHTML = buildReport();
     document.body.classList.add("printing");
@@ -508,6 +603,25 @@
     $("copySumBtn").addEventListener("click", copySummary);
     $("exportBtn").addEventListener("click", exportCsv);
     $("reportBtn").addEventListener("click", printReport);
+
+    $("totalsArea").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      if (b.id === "clearDrill") { S.fType = S.fCat = S.fMonth = null; renderAll(); return; }
+      var dim = b.getAttribute("data-dim"), code = b.getAttribute("data-code");
+      if (!dim) return;
+      if (dim === "type") S.fType = S.fType === code ? null : code;
+      else S.fCat = S.fCat === code ? null : code;
+      renderAll();
+    });
+
+    $("monthlyArea").addEventListener("click", function (e) {
+      var tr = e.target.closest("tr[data-month]");
+      if (!tr) return;
+      var mk = tr.getAttribute("data-month");
+      S.fMonth = S.fMonth === mk ? null : mk;
+      renderAll();
+    });
     $("refreshBtn").addEventListener("click", function () {
       setStatus("warn", "Loading\u2026");
       loadEntries().then(function (list) {
@@ -526,6 +640,8 @@
       aggregate: aggregate, classifyCode: classifyCode, weekKey: weekKey,
       setEntries: function (l) { S.entries = l; }, setMetric: function (m) { S.metric = m; },
       buildReport: buildReport, monthKey: monthKey, fmtMonth: fmtMonth,
+      drillEntries: drillEntries, setDrill: function (t, c, m) { S.fType = t || null; S.fCat = c || null; S.fMonth = m || null; },
+      getDrill: function () { return { type: S.fType, cat: S.fCat, month: S.fMonth }; },
       setPeriod: function (p) { S.period = p; }, renderAll: renderAll, PRICE: PRICE, DESC: DESC,
     };
     window.__s.init = init;
