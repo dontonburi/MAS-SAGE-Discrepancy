@@ -24,6 +24,12 @@
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
     return dstr(d);
   }
+  function monthKey(s) { return String(s || "").slice(0, 7); }
+  function fmtMonth(k) {
+    var p = String(k || "").split("-").map(Number);
+    if (!p[0] || !p[1]) return k || "\u2014";
+    return new Date(p[0], p[1] - 1, 1).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
   function money(n) {
     return "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -110,7 +116,7 @@
   function fmtMeasure(v) { return S.metric === "value" ? money(v) : num(v); }
 
   function aggregate(list) {
-    var byType = {}, byCat = {}, byKey = {}, byItem = {}, weeks = {}, catKeys = {};
+    var byType = {}, byCat = {}, byKey = {}, byItem = {}, weeks = {}, months = {}, catKeys = {};
     var missingPrice = 0, totalVal = 0;
     list.forEach(function (e) {
       var c = classifyCode(e.code, e.desc);
@@ -132,11 +138,20 @@
         weeks[wk].total += m;
         weeks[wk].cats[cl] = (weeks[wk].cats[cl] || 0) + m;
       }
+      var mk = monthKey(e.date);
+      if (mk) {
+        if (!months[mk]) months[mk] = { total: 0, cats: {}, types: {}, n: 0, val: 0 };
+        months[mk].total += m;
+        months[mk].cats[cl] = (months[mk].cats[cl] || 0) + m;
+        months[mk].types[tl] = (months[mk].types[tl] || 0) + m;
+        months[mk].n += 1;
+        months[mk].val += valueOf(e);
+      }
       if (PRICE[e.code] == null) missingPrice++;
       totalVal += valueOf(e);
     });
     return {
-      byType: byType, byCat: byCat, byKey: byKey, weeks: weeks,
+      byType: byType, byCat: byCat, byKey: byKey, weeks: weeks, months: months,
       cats: Object.keys(catKeys).sort(),
       items: Object.keys(byItem).map(function (k) { return byItem[k]; }),
       missingPrice: missingPrice, totalVal: totalVal, n: list.length,
@@ -201,6 +216,47 @@
     area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
   }
 
+  function deltaCell(cur, prev) {
+    if (prev == null) return "<td class='mx-n'>\u00b7</td>";
+    var d = cur - prev;
+    if (!prev && !cur) return "<td class='mx-n'>\u00b7</td>";
+    var pct = prev ? Math.round((d / prev) * 100) : null;
+    var cls = d > 0 ? "dn-up" : d < 0 ? "dn-down" : "dn-flat";
+    var arrow = d > 0 ? "\u25b2" : d < 0 ? "\u25bc" : "\u2013";
+    var txt = pct == null ? (d > 0 ? "new" : "\u2013") : (pct > 0 ? "+" : "") + pct + "%";
+    return "<td class='mx-n " + cls + "'>" + arrow + " " + txt + "</td>";
+  }
+
+  function renderMonthly(ag) {
+    var area = $("monthlyArea");
+    var keys = Object.keys(ag.months).sort();
+    if (!keys.length) {
+      area.innerHTML = '<div class="empty">No entries in this period.</div>';
+      return;
+    }
+    if (keys.length > 13) keys = keys.slice(-13);
+    var cats = ag.cats;
+    var max = 1;
+    keys.forEach(function (k) { if (ag.months[k].total > max) max = ag.months[k].total; });
+    var head = "<tr><th class='c-date'>Month</th>" +
+      cats.map(function (c) { return "<th class='mx-n'>" + esc(c) + "</th>"; }).join("") +
+      "<th class='mx-n'>Total</th><th class='mx-n'>vs prior</th><th></th></tr>";
+    var rows = keys.map(function (k, i) {
+      var m = ag.months[k];
+      var prev = i > 0 ? ag.months[keys[i - 1]] : null;
+      var cells = cats.map(function (c) {
+        var v = m.cats[c] || 0;
+        return "<td class='mx-n'>" + (v ? fmtMeasure(v) : "\u00b7") + "</td>";
+      }).join("");
+      var barW = Math.round((m.total / max) * 100);
+      return "<tr><td class='c-date'>" + esc(fmtMonth(k)) + "</td>" + cells +
+        "<td class='mx-n mx-t'>" + fmtMeasure(m.total) + "</td>" +
+        deltaCell(m.total, prev ? prev.total : null) +
+        "<td class='mx-bar'><span style='width:" + barW + "%'></span></td></tr>";
+    }).join("");
+    area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
+  }
+
   function renderTop(ag) {
     var area = $("topArea");
     if (!ag.items.length) {
@@ -225,7 +281,9 @@
     $("entryCount").textContent = ag.n + (ag.n === 1 ? " entry" : " entries");
     $("copySumBtn").disabled = !ag.n;
     $("exportBtn").disabled = !ag.n;
+    $("reportBtn").disabled = !ag.n;
     renderTotals(ag);
+    renderMonthly(ag);
     renderWeekly(ag);
     renderTop(ag);
     return ag;
@@ -326,6 +384,96 @@
     toast("CSV exported");
   }
 
+  /* ---------------- one-page report ---------------- */
+  function periodLabel() {
+    return S.period === "all" ? "All time" : "Last " + S.period + " days";
+  }
+
+  function buildReport() {
+    var list = periodEntries();
+    var ag = aggregate(list);
+    var metricName = S.metric === "value" ? "Value ($)" : "Entries";
+    var dates = list.map(function (e) { return e.date; }).filter(Boolean).sort();
+    var range = dates.length ? fmtDate(dates[0]) + " \u2013 " + fmtDate(dates[dates.length - 1]) : "\u2014";
+
+    var kpis = '<div class="rp-kpis">' +
+      '<div class="rp-kpi"><span>Entries</span><b>' + num(ag.n) + "</b></div>" +
+      '<div class="rp-kpi"><span>Value</span><b>' + money(ag.totalVal) + "</b></div>" +
+      '<div class="rp-kpi"><span>Production dates</span><b>' + esc(range) + "</b></div>" +
+      (ag.missingPrice ? '<div class="rp-kpi"><span>No unit cost on file</span><b>' + num(ag.missingPrice) + "</b></div>" : "") +
+      "</div>";
+
+    function miniTable(obj) {
+      var keys = Object.keys(obj).sort(function (x, y) { return obj[y] - obj[x]; });
+      if (!keys.length) return "<p>None.</p>";
+      var tot = keys.reduce(function (s, k) { return s + obj[k]; }, 0);
+      return "<table class='rp-tbl'><tbody>" + keys.map(function (k) {
+        var pct = tot ? Math.round((obj[k] / tot) * 100) : 0;
+        return "<tr><td>" + esc(k) + "</td><td class='mx-n'>" + fmtMeasure(obj[k]) + "</td><td class='mx-n rp-pct'>" + pct + "%</td></tr>";
+      }).join("") + "</tbody></table>";
+    }
+
+    // month-over-month, trimmed to fit a page
+    var mKeys = Object.keys(ag.months).sort();
+    var mShow = mKeys.slice(-6);
+    var mMax = 1;
+    mShow.forEach(function (k) { if (ag.months[k].total > mMax) mMax = ag.months[k].total; });
+    var monthRows = mShow.map(function (k, i) {
+      var m = ag.months[k];
+      var prevKey = mKeys[mKeys.indexOf(k) - 1];
+      var prev = prevKey ? ag.months[prevKey] : null;
+      var barW = Math.round((m.total / mMax) * 100);
+      return "<tr><td>" + esc(fmtMonth(k)) + "</td><td class='mx-n'>" + fmtMeasure(m.total) + "</td>" +
+        deltaCell(m.total, prev ? prev.total : null) +
+        "<td class='rp-bar'><span style='width:" + barW + "%'></span></td></tr>";
+    }).join("");
+    var monthBlock = mShow.length
+      ? "<table class='rp-tbl'><thead><tr><th>Month</th><th class='mx-n'>" + esc(metricName) +
+        "</th><th class='mx-n'>vs prior</th><th></th></tr></thead><tbody>" + monthRows + "</tbody></table>"
+      : "<p>No monthly data.</p>";
+
+    var topItems = ag.items.slice().sort(function (x, y) { return y.v - x.v; }).slice(0, 10);
+    var topRows = topItems.map(function (it) {
+      return "<tr><td class='mono'>" + esc(it.code) + "</td><td>" + esc(String(it.desc).slice(0, 42)) +
+        "</td><td>" + esc(it.label) + "</td><td class='mx-n'>" + num(it.n) +
+        "</td><td class='mx-n'>" + fmtMeasure(it.v) + "</td></tr>";
+    }).join("");
+
+    return '<div class="rp">' +
+      '<div class="rp-head"><div><h1>Material Summary</h1>' +
+      "<p>" + esc(periodLabel()) + " \u00b7 measured by " + esc(metricName.toLowerCase()) +
+      " \u00b7 generated " + esc(new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })) + "</p></div>" +
+      '<div class="rp-brand">Material Usage Log</div></div>' +
+      kpis +
+      '<div class="rp-cols">' +
+      "<div><h2>Packaging vs ingredients</h2>" + miniTable(ag.byType) +
+      "<h2>By product line</h2>" + miniTable(ag.byCat) + "</div>" +
+      "<div><h2>Month over month</h2>" + monthBlock + "</div>" +
+      "</div>" +
+      "<h2>Most-affected items</h2>" +
+      "<table class='rp-tbl'><thead><tr><th>Item</th><th>Description</th><th>Category</th>" +
+      "<th class='mx-n'>Entries</th><th class='mx-n'>" + esc(metricName) + "</th></tr></thead><tbody>" +
+      (topRows || "<tr><td colspan='5'>None.</td></tr>") + "</tbody></table>" +
+      '<p class="rp-foot">Unit costs come from the Sage item master; items without a cost on file are counted but not valued.</p>' +
+      "</div>";
+  }
+
+  function printReport() {
+    var list = periodEntries();
+    if (!list.length) { toast("Nothing to report for this filter"); return; }
+    $("reportArea").innerHTML = buildReport();
+    document.body.classList.add("printing");
+    var done = function () {
+      document.body.classList.remove("printing");
+      window.removeEventListener("afterprint", done);
+    };
+    window.addEventListener("afterprint", done);
+    setTimeout(function () {
+      try { window.print(); } catch (e) { toast("Printing isn't available here"); done(); }
+      setTimeout(done, 1500);
+    }, 60);
+  }
+
   /* ---------------- gate + init ---------------- */
   function unlock() {
     $("gateArea").classList.add("hidden");
@@ -349,13 +497,17 @@
     $("gateInput").focus();
   }
 
+  var inited = false;
   function init() {
+    if (inited) return;   // safe to call twice (readyState races)
+    inited = true;
     $("gateBtn").addEventListener("click", tryGate);
     $("gateInput").addEventListener("keydown", function (e) { if (e.key === "Enter") tryGate(); });
     $("periodSel").addEventListener("change", function () { S.period = this.value; renderAll(); });
     $("metricSel").addEventListener("change", function () { S.metric = this.value; renderAll(); });
     $("copySumBtn").addEventListener("click", copySummary);
     $("exportBtn").addEventListener("click", exportCsv);
+    $("reportBtn").addEventListener("click", printReport);
     $("refreshBtn").addEventListener("click", function () {
       setStatus("warn", "Loading\u2026");
       loadEntries().then(function (list) {
@@ -373,8 +525,10 @@
     window.__s = {
       aggregate: aggregate, classifyCode: classifyCode, weekKey: weekKey,
       setEntries: function (l) { S.entries = l; }, setMetric: function (m) { S.metric = m; },
+      buildReport: buildReport, monthKey: monthKey, fmtMonth: fmtMonth,
       setPeriod: function (p) { S.period = p; }, renderAll: renderAll, PRICE: PRICE, DESC: DESC,
     };
+    window.__s.init = init;
     if (document.readyState !== "loading") init();
     else document.addEventListener("DOMContentLoaded", init);
   }

@@ -10,7 +10,7 @@
     href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
     rel="stylesheet"
   />
-  <link rel="stylesheet" href="styles.css?v=20260817a" />
+  <link rel="stylesheet" href="styles.css?v=20260901a" />
 </head>
 <body>
   <header class="head">
@@ -64,9 +64,18 @@
           <button class="ghost" id="refreshBtn" type="button">Refresh</button>
           <button class="ghost accent" id="copySumBtn" type="button" disabled>Copy summary</button>
           <button class="ghost" id="exportBtn" type="button" disabled>Export CSV</button>
+          <button class="ghost accent" id="reportBtn" type="button" disabled>One-page report</button>
         </div>
       </div>
       <div id="totalsArea"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2 class="label"><span class="sq"></span>Month over month</h2>
+        <span class="sel-summary">Change compares each month with the one before it.</span>
+      </div>
+      <div id="monthlyArea"></div>
     </section>
 
     <section class="card">
@@ -92,11 +101,13 @@
     </p>
   </div>
 
+  <div id="reportArea"></div>
+
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js?v=20260817a"></script>
-  <script src="materials.js?v=20260817a"></script>
-  <script src="taxonomy.js?v=20260817a"></script>
-  <script src="summary.js?v=20260817a"></script>
+  <script src="config.js?v=20260901a"></script>
+  <script src="materials.js?v=20260901a"></script>
+  <script src="taxonomy.js?v=20260901a"></script>
+  <script src="summary.js?v=20260901a"></script>
 </body>
 </html>
