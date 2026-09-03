@@ -2,6 +2,7 @@
 (function () {
   var cfg = (typeof window !== "undefined" && window.APP_CONFIG) || {};
   var TAX = (typeof window !== "undefined" && window.TAXONOMY) || null;
+  var NOTES = (typeof window !== "undefined" && window.NOTES) || null;
 
   /* ---------------- helpers ---------------- */
   function $(id) { return document.getElementById(id); }
@@ -57,7 +58,7 @@
   /* ---------------- state ---------------- */
   var S = {
     entries: [], period: "all", metric: "count", toastTimer: null,
-    fType: null, fCat: null, fMonth: null,   // drill-down, set by clicking the dashboard
+    fType: null, fCat: null, fMonth: null, fNote: null,  // drill-down, set by clicking the dashboard
   };
 
   function toast(m) {
@@ -90,7 +91,7 @@
         return rows.map(function (r) {
           return {
             code: r.code, desc: r.description || "", qty: Number(r.qty) || 0,
-            date: r.used_on, rectified: !!r.rectified,
+            date: r.used_on, rectified: !!r.rectified, note: r.note || "",
             ts: Date.parse(r.created_at) || 0,
           };
         });
@@ -99,7 +100,7 @@
     var list = [];
     try { list = JSON.parse(localStorage.getItem("material-usage-entries") || "[]"); } catch (e) { list = []; }
     return Promise.resolve((Array.isArray(list) ? list : []).map(function (e) {
-      return { code: e.code, desc: e.desc || "", qty: Number(e.qty) || 0, date: e.date, rectified: !!e.rectified, ts: e.ts || 0 };
+      return { code: e.code, desc: e.desc || "", qty: Number(e.qty) || 0, date: e.date, rectified: !!e.rectified, note: e.note || "", ts: e.ts || 0 };
     }));
   }
 
@@ -111,16 +112,21 @@
     var cut = dstr(d);
     return S.entries.filter(function (e) { return (e.date || "") >= cut; });
   }
+  function noteBucket(e) {
+    return NOTES ? NOTES.classifyNote(e.note) : { id: "none", label: "No note", tags: [] };
+  }
+
   function matchesDrill(e) {
-    if (!S.fType && !S.fCat && !S.fMonth) return true;
+    if (!S.fType && !S.fCat && !S.fMonth && !S.fNote) return true;
     var c = classifyCode(e.code, e.desc);
     if (S.fType && (c.type || "") !== S.fType) return false;
     if (S.fCat && (c.cat || (c.type ? "-" : "")) !== S.fCat) return false;
     if (S.fMonth && monthKey(e.date) !== S.fMonth) return false;
+    if (S.fNote && noteBucket(e).id !== S.fNote) return false;
     return true;
   }
   function drillEntries() { return periodEntries().filter(matchesDrill); }
-  function drillActive() { return !!(S.fType || S.fCat || S.fMonth); }
+  function drillActive() { return !!(S.fType || S.fCat || S.fMonth || S.fNote); }
 
   function valueOf(e) {
     var p = PRICE[e.code];
@@ -131,7 +137,7 @@
 
   function aggregate(list) {
     var byType = {}, byCat = {}, byKey = {}, byItem = {}, weeks = {}, months = {}, catKeys = {};
-    var typeCodes = {}, catCodes = {};
+    var typeCodes = {}, catCodes = {}, noteBuckets = {};
     var missingPrice = 0, totalVal = 0;
     list.forEach(function (e) {
       var c = classifyCode(e.code, e.desc);
@@ -159,6 +165,12 @@
         weeks[wk].total += m;
         weeks[wk].cats[cl] = (weeks[wk].cats[cl] || 0) + m;
       }
+      var nb = noteBucket(e);
+      if (!noteBuckets[nb.id]) noteBuckets[nb.id] = { code: nb.id, label: nb.label, hint: nb.hint || "", v: 0, n: 0, ex: [] };
+      noteBuckets[nb.id].v += m;
+      noteBuckets[nb.id].n += 1;
+      if (e.note && noteBuckets[nb.id].ex.length < 3) noteBuckets[nb.id].ex.push(e.note);
+
       var mk = monthKey(e.date);
       if (mk) {
         if (!months[mk]) months[mk] = { total: 0, cats: {}, types: {}, n: 0, val: 0 };
@@ -173,7 +185,7 @@
     });
     return {
       byType: byType, byCat: byCat, byKey: byKey, weeks: weeks, months: months,
-      typeCodes: typeCodes, catCodes: catCodes,
+      typeCodes: typeCodes, catCodes: catCodes, noteBuckets: noteBuckets,
       cats: Object.keys(catKeys).sort(),
       items: Object.keys(byItem).map(function (k) { return byItem[k]; }),
       missingPrice: missingPrice, totalVal: totalVal, n: list.length,
@@ -247,6 +259,7 @@
     if (S.fType) bits.push(TAX ? TAX.typeLabel(S.fType) : S.fType);
     if (S.fCat) bits.push(S.fCat === "-" ? "Unspecified" : (TAX ? TAX.catLabel(S.fCat) : S.fCat));
     if (S.fMonth) bits.push(fmtMonth(S.fMonth));
+    if (S.fNote) bits.push(NOTES ? NOTES.bucketLabel(S.fNote) : S.fNote);
     return '<div class="drill"><span class="drill-k">Filtered to</span> <b>' + esc(bits.join(" \u00b7 ")) +
       '</b><button type="button" class="drill-x" id="clearDrill">Clear</button></div>';
   }
@@ -341,6 +354,44 @@
     area.innerHTML = '<div class="tbl-wrap"><table class="tbl mx"><thead>' + head + "</thead><tbody>" + rows + "</tbody></table></div>";
   }
 
+  function renderReasons(agAll, agDrill) {
+    var area = $("reasonsArea");
+    var src = agAll.noteBuckets;
+    var rows = Object.keys(src).map(function (k) { return src[k]; })
+      .sort(function (x, y) { return y.v - x.v; });
+    if (!rows.length) {
+      area.innerHTML = '<div class="empty">No entries in this period.</div>';
+      return;
+    }
+    var total = rows.reduce(function (s, r) { return s + r.v; }, 0);
+    var known = rows.filter(function (r) { return r.code !== "none" && r.code !== "other"; })
+      .reduce(function (s, r) { return s + r.n; }, 0);
+    var allN = rows.reduce(function (s, r) { return s + r.n; }, 0);
+
+    var body = rows.map(function (r, i) {
+      var on = S.fNote === r.code;
+      var w = pct(r.v, total);
+      var faded = r.code === "none" || r.code === "other";
+      var ex = r.ex.length
+        ? '<div class="rs-ex">' + r.ex.map(function (x) {
+            return "<span>\u201c" + esc(String(x).slice(0, 70)) + (String(x).length > 70 ? "\u2026" : "") + "\u201d</span>";
+          }).join("") + "</div>"
+        : "";
+      return '<button type="button" class="rs' + (on ? " on" : "") + (faded ? " rs-faded" : "") +
+        '" data-note="' + esc(r.code) + '" title="' + esc(r.hint || "") + '">' +
+        '<span class="rs-top"><span class="rs-label">' + esc(r.label) + "</span>" +
+        "<b>" + esc(fmtMeasure(r.v)) + "</b><i>" + Math.round(w) + "%</i></span>" +
+        '<span class="rs-bar"><span style="width:' + w.toFixed(1) + "%;background:" + colorFor(i) + '"></span></span>' +
+        ex + "</button>";
+    }).join("");
+
+    area.innerHTML = '<div class="rs-list">' + body + "</div>" +
+      '<p class="dash-hint">Buckets are guessed from the words in each note \u2014 ' +
+      esc(num(known)) + " of " + esc(num(allN)) +
+      " entries matched a known cause. Click one to focus it; hover for what it means. Patterns live in " +
+      '<span class="mono">notes.js</span>.</p>';
+  }
+
   function renderTop(ag) {
     var area = $("topArea");
     if (!ag.items.length) {
@@ -369,6 +420,7 @@
     $("exportBtn").disabled = !agDrill.n;
     $("reportBtn").disabled = !agDrill.n;
     renderTotals(agAll, agDrill, listAll);
+    renderReasons(agAll, agDrill);
     renderMonthly(agDrill);
     renderWeekly(agDrill);
     renderTop(agDrill);
@@ -447,6 +499,12 @@
     rows.push(["Product line", "Entries or value"]);
     Object.keys(ag.byCat).forEach(function (k) { rows.push([k, ag.byCat[k]]); });
     rows.push([]);
+    rows.push(["Likely cause (from the note)", "Entries", "Measure"]);
+    Object.keys(ag.noteBuckets).forEach(function (k) {
+      var b = ag.noteBuckets[k];
+      rows.push([b.label, b.n, b.v]);
+    });
+    rows.push([]);
     rows.push(["Week of"].concat(ag.cats).concat(["Total"]));
     Object.keys(ag.weeks).sort().forEach(function (k) {
       var w = ag.weeks[k];
@@ -476,6 +534,7 @@
     if (S.fType) bits.push(TAX ? TAX.typeLabel(S.fType) : S.fType);
     if (S.fCat) bits.push(S.fCat === "-" ? "Unspecified" : (TAX ? TAX.catLabel(S.fCat) : S.fCat));
     if (S.fMonth) bits.push(fmtMonth(S.fMonth));
+    if (S.fNote) bits.push(NOTES ? NOTES.bucketLabel(S.fNote) : S.fNote);
     return bits.join(" \u00b7 ");
   }
 
@@ -543,7 +602,12 @@
       '<div class="rp-cols">' +
       "<div><h2>Packaging vs ingredients</h2>" + miniTable(ag.byType) +
       "<h2>By product line</h2>" + miniTable(ag.byCat) + "</div>" +
-      "<div><h2>Month over month</h2>" + monthBlock + "</div>" +
+      "<div><h2>Month over month</h2>" + monthBlock +
+      "<h2>Likely causes</h2>" + miniTable((function () {
+        var o = {};
+        Object.keys(ag.noteBuckets).forEach(function (k) { o[ag.noteBuckets[k].label] = ag.noteBuckets[k].v; });
+        return o;
+      })()) + "</div>" +
       "</div>" +
       "<h2>Most-affected items</h2>" +
       "<table class='rp-tbl'><thead><tr><th>Item</th><th>Description</th><th>Category</th>" +
@@ -607,11 +671,19 @@
     $("totalsArea").addEventListener("click", function (e) {
       var b = e.target.closest("button");
       if (!b) return;
-      if (b.id === "clearDrill") { S.fType = S.fCat = S.fMonth = null; renderAll(); return; }
+      if (b.id === "clearDrill") { S.fType = S.fCat = S.fMonth = S.fNote = null; renderAll(); return; }
       var dim = b.getAttribute("data-dim"), code = b.getAttribute("data-code");
       if (!dim) return;
       if (dim === "type") S.fType = S.fType === code ? null : code;
       else S.fCat = S.fCat === code ? null : code;
+      renderAll();
+    });
+
+    $("reasonsArea").addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-note]");
+      if (!b) return;
+      var code = b.getAttribute("data-note");
+      S.fNote = S.fNote === code ? null : code;
       renderAll();
     });
 
@@ -640,8 +712,9 @@
       aggregate: aggregate, classifyCode: classifyCode, weekKey: weekKey,
       setEntries: function (l) { S.entries = l; }, setMetric: function (m) { S.metric = m; },
       buildReport: buildReport, monthKey: monthKey, fmtMonth: fmtMonth,
-      drillEntries: drillEntries, setDrill: function (t, c, m) { S.fType = t || null; S.fCat = c || null; S.fMonth = m || null; },
-      getDrill: function () { return { type: S.fType, cat: S.fCat, month: S.fMonth }; },
+      drillEntries: drillEntries, noteBucket: noteBucket,
+      setDrill: function (t, c, m, nt) { S.fType = t || null; S.fCat = c || null; S.fMonth = m || null; S.fNote = nt || null; },
+      getDrill: function () { return { type: S.fType, cat: S.fCat, month: S.fMonth, note: S.fNote }; },
       setPeriod: function (p) { S.period = p; }, renderAll: renderAll, PRICE: PRICE, DESC: DESC,
     };
     window.__s.init = init;
