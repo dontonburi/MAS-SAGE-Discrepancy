@@ -193,7 +193,8 @@
   }
 
   /* ---------------- rendering ---------------- */
-  var PALETTE = ["#1f6f8b", "#e8b33c", "#4b8f6d", "#a8562f", "#6b5b95", "#8a8f5c", "#b3617a", "#4a5a65"];
+  // Gas Blend Scrap Factor Report data colours (validated against white)
+  var PALETTE = ["#014583", "#22a7c4", "#c27a12", "#457a94", "#147a6e", "#2563b0", "#b3617a", "#6f7378"];
   function colorFor(i) { return PALETTE[i % PALETTE.length]; }
 
   function pct(v, total) { return total ? (v / total) * 100 : 0; }
@@ -246,8 +247,8 @@
     var arrow = dir === "up" ? "\u25b2" : dir === "down" ? "\u25bc" : "\u2013";
     var change = prev ? Math.round(((last - prev) / prev) * 100) : 0;
     return '<div class="spark"><svg viewBox="0 0 ' + w + " " + h + '" preserveAspectRatio="none" aria-hidden="true">' +
-      '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#1f6f8b" stroke-width="2" stroke-linejoin="round" />' +
-      '<circle cx="' + (w).toFixed(1) + '" cy="' + (h - (last / max) * (h - 6) - 3).toFixed(1) + '" r="2.5" fill="#1f6f8b" />' +
+      '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#014583" stroke-width="2" stroke-linejoin="round" />' +
+      '<circle cx="' + (w).toFixed(1) + '" cy="' + (h - (last / max) * (h - 6) - 3).toFixed(1) + '" r="2.5" fill="#014583" />' +
       "</svg>" +
       '<div class="spark-cap">' + esc(fmtMonth(keys[0])) + " \u2192 " + esc(fmtMonth(keys[keys.length - 1])) +
       ' <span class="dn-' + dir + '">' + arrow + " " + (prev ? (change > 0 ? "+" : "") + change + "%" : "\u2013") + "</span></div></div>";

@@ -6,43 +6,50 @@
   <title>Material Summary — Usage Log</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"
-    rel="stylesheet"
-  />
-  <link rel="stylesheet" href="styles.css?v=20261009a" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20261029a" />
 </head>
-<body>
-  <header class="head">
-    <div class="head-inner">
-      <div>
-        <div class="brand">
-          <span class="tick"></span>
-          <h1>Material Summary</h1>
-        </div>
-        <p class="sub">Where the discrepancies land — by packaging vs ingredients, by product line, week over week.</p>
-      </div>
-      <div class="head-right">
-        <a class="pill pill-link" href="index.html">&larr; Usage log</a>
-        <a class="pill pill-link" href="compliance.html">Paperwork compliance &rarr;</a>
+<body id="top">
+<svg class="defs-host" aria-hidden="true" focusable="false"><defs><symbol id="mark" viewBox="-1 -1 17 19"><path d="M14.33 3.697c.715 2.667-.89 5.415-3.586 6.137a5 5 0 0 1-.833.15l.019.068c.715 2.667-.89 5.415-3.586 6.137-2.695.723-5.46-.854-6.174-3.521C-.545 10 1.06 7.252 3.756 6.53q.418-.111.834-.15l-.02-.068C3.856 3.645 5.46.897 8.156.175s5.46.855 6.175 3.522"/></symbol></defs></svg>
+
+  <header class="site-header">
+    <div class="hcont">
+      <a class="brand" href="index.html" aria-label="Material Usage Log, home">
+        <svg class="brand-mark" aria-hidden="true"><use href="#mark"/></svg>
+        <span class="brand-text"><span class="brand-eyebrow">Alamance Foods</span><span class="brand-name">Material Usage Log</span></span>
+      </a>
+      <nav class="site-nav" id="siteNav" aria-label="Pages">
+        <a href="index.html">Usage log</a>
+        <a href="summary.html" class="active" aria-current="page">Material summary</a>
+        <a href="compliance.html">Paperwork compliance</a>
+      </nav>
+      <div class="hstat">
         <span class="pill pill-warn" id="statusPill"><span class="dot"></span><span id="statusText">Locked</span></span>
         <span class="count" id="entryCount">&mdash;</span>
       </div>
+      <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="siteNav">Menu</button>
     </div>
   </header>
 
-  <!-- password gate -->
+  <div class="main">
+    <div class="page-head">
+      <span class="eyebrow"><i></i>Costs &amp; causes</span>
+      <h1>Material summary</h1>
+      <p class="lede">Where the discrepancies land: packaging vs ingredients, by product line, and why they happened.</p>
+    </div>
+  </div>
+
+  <!-- password gate (same card as the gas report's sign-in) -->
   <main class="main" id="gateArea">
-    <section class="card">
-      <h2 class="label"><span class="sq"></span>Protected view</h2>
-      <p class="pw-note">
-        This page shows material costs, so it asks for the same password as the CSV export.
-      </p>
-      <div class="gate-row">
-        <input type="password" id="gateInput" class="input" placeholder="Password" autocomplete="off" />
-        <button class="save save-sm" id="gateBtn" type="button">Unlock</button>
-      </div>
-      <div class="pw-err hidden" id="gateErr">Wrong password — try again.</div>
+    <section class="card gate-card">
+      <svg class="signin-mark" aria-hidden="true"><use href="#mark"/></svg>
+      <span class="eyebrow"><i></i>Protected view</span>
+      <h2>Material summary</h2>
+      <p class="pw-note">This page shows material costs, so it asks for the same password as the CSV export.</p>
+      <label class="flabel" for="gateInput">Password</label>
+      <input type="password" id="gateInput" class="input" autocomplete="off" />
+      <button class="save" id="gateBtn" type="button">Unlock</button>
+      <div class="pw-err hidden" id="gateErr">Wrong password &mdash; try again.</div>
     </section>
   </main>
 
@@ -109,14 +116,25 @@
     </p>
   </div>
 
+  <footer class="site-foot">
+    <div class="wrap">
+      <div class="foot-act">
+        <div class="fb"><svg class="foot-mark" aria-hidden="true"><use href="#mark"/></svg><b>Material Usage Log</b><span>Sage MAS material discrepancies, paperwork compliance and material cost summary, logged by shift.</span></div>
+        <a class="btn secondary small" href="#top">Back to top &uarr;</a>
+      </div>
+      <div class="foot-meta"><span>Alamance Foods &middot; internal reference</span><span>Designed by Don Sang Chin</span></div>
+    </div>
+  </footer>
+
   <div id="reportArea"></div>
 
   <div class="toast hidden" id="toast"></div>
 
-  <script src="config.js?v=20261009a"></script>
-  <script src="materials.js?v=20261009a"></script>
-  <script src="taxonomy.js?v=20261009a"></script>
-  <script src="notes.js?v=20261009a"></script>
-  <script src="summary.js?v=20261009a"></script>
+  <script src="site.js?v=20261029a"></script>
+  <script src="config.js?v=20261029a"></script>
+  <script src="materials.js?v=20261029a"></script>
+  <script src="taxonomy.js?v=20261029a"></script>
+  <script src="notes.js?v=20261029a"></script>
+  <script src="summary.js?v=20261029a"></script>
 </body>
 </html>

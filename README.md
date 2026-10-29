@@ -9,7 +9,8 @@ No build tools, no frameworks to install. Plain HTML/CSS/JS — push it and it r
 | File | What it does |
 |---|---|
 | `index.html` | The page |
-| `styles.css` | The look |
+| `styles.css` | The look, matching the Gas Blend Scrap Factor Report (DM Sans, navy pill buttons, frosted header) |
+| `site.js` | Shared header behaviour on every page: the phone Menu button and the shadow when scrolling |
 | `app.js` | All the behavior (search, line board, log, CSV export) |
 | `materials.js` | The item list (code + description, one per line) |
 | `config.js` | Optional shared-database settings (see below) |
