@@ -459,14 +459,22 @@
       d.setDate(d.getDate() - n);
       return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     };
-    var cut3 = dayCut(3);
-    // Default "Open + rectified" view: every open entry (any age),
-    // plus rectified entries entered within the last 3 days.
-    // (Once everything is resolved, that equals "all records from the last 3 days.")
+    var cut2 = dayCut(2);
+    // Default "Open + rectified" view works by the day an entry was entered:
+    //   - the last 2 days (today, yesterday, the day before) always show in full;
+    //   - an older day still shows while anything in it is open,
+    //     and is hidden once every entry in that day is rectified.
+    var openDays = {};
+    if (S.fstatus === "recent") {
+      S.entries.forEach(function (e) { if (!e.rectified) openDays[enteredDay(e.ts)] = true; });
+    }
     return S.entries.filter(function (e) {
       if (S.fstatus === "open" && e.rectified) return false;
       if (S.fstatus === "resolved" && !e.rectified) return false;
-      if (S.fstatus === "recent" && e.rectified && enteredDay(e.ts) < cut3) return false;
+      if (S.fstatus === "recent") {
+        var dk = enteredDay(e.ts);
+        if (dk < cut2 && !openDays[dk]) return false;
+      }
       if (S.fname && (e.by || "") !== S.fname) return false;
       if (S.fdate && e.date !== S.fdate) return false;
       if (S.fline && (e.lines || []).indexOf(S.fline) === -1) return false;
@@ -560,7 +568,7 @@
       area.innerHTML = '<div class="empty">' + (n === 0
         ? "No usage logged yet. Fill out the ticket above — or press <strong>Load example</strong> to see how one is filled."
         : allClear
-          ? "All caught up — everything is resolved and nothing new in the last 3 days. Use the \u201CResolved only\u201D filter to browse older records."
+          ? "All caught up — every older day is fully rectified and nothing new in the last 2 days. Use the \u201CResolved only\u201D filter to browse older records."
           : "No entries match these filters.") + "</div>";
       updateCopyLabel(vis);
       return;
